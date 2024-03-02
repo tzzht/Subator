@@ -82,7 +82,7 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     for content in en_contents:
         content_words = content.split(' ')
         for content_word in content_words:
-            print(f'Checking the word: {content_word} with the word: {all_words[i]}')
+            # print(f'Checking the word: {content_word} with the word: {all_words[i]}')
             if content_word != all_words[i]:
                 print(f'In the content: {content}, the word: {content_word} does not match with the word: {all_words[i]}')
                 print(f'content_word: {content_word}, all_words[i]: {all_words[i]}, all_words[i+1]: {all_words[i+1]}')

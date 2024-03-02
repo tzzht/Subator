@@ -1,6 +1,7 @@
 import os
 import argparse
 import sys
+import spacy
 from zhipuai import ZhipuAI
 
 def merge_short_lines(contents, MAX_LINE_LENGTH):
@@ -39,11 +40,37 @@ def get_content(content_path, MAX_LINE_LENGTH):
         print(f"File '{content_path}' not found.")
         exit(1)
     with open(content_path, 'r', encoding='utf-8') as f:
-        all_contents = f.readlines()
+        all_contents = f.read()
+    
+    all_contents = ' '.join(all_contents.split())
+
+    # Load the spacy model
+    en_nlp = spacy.load("en_core_web_trf")
+    doc = en_nlp(all_contents)
+    sentences = []
+    for i, sent in enumerate(doc.sents):
+        if len(sent.text) > MAX_LINE_LENGTH*2:
+            print(f"Line {i+1} is too long: {len(sent.text)}")
+            print(f"    {sent.text}")
+            chunk_start = 0
+            chunks = []
+            for i, token in enumerate(sent):
+                if i < len(sent)-1 and token.dep_ == "punct" and (sent[i+1].dep_ == "cc" or sent[i+1].dep_ == "nsubj"):
+                    span = sent[chunk_start:i+1]
+                    chunks.append(span.text)
+                    chunk_start = i+1
+            span = sent[chunk_start:]
+            chunks.append(span.text)
+            for chunk in chunks:
+                print(f"    Split sentence: {chunk}")
+            sentences.extend(chunks)
+        else:
+            sentences.append(sent.text)
+
     # strip the contents
-    all_contents = [i.strip() for i in all_contents]
+    sentences = [i.strip() for i in sentences]
     # Merge short lines
-    return merge_short_lines(all_contents, MAX_LINE_LENGTH)
+    return merge_short_lines(sentences, MAX_LINE_LENGTH)
 
 def translate_all(contents, client, user_prompt, WINDOW_SIZE=2):
     num_tokens = 0
@@ -66,14 +93,17 @@ def translate_all(contents, client, user_prompt, WINDOW_SIZE=2):
                 {"role": "user", "content": call_contents,}
             ],
         )
-        # add sth to make sure the response only contains one line
-        if '\n' in response.choices[0].message.content:
+        
+        content_translated = response.choices[0].message.content
+        ratio = len(content_translated)/len(content.split())
+        if '\n' in content_translated:
             print(f"    Response contains multiple lines. Please check the response.")
-        if len(response.choices[0].message.content) > int(len(content)*0.66):
+        if ratio > 2.4:
             print(f"    Response is longer than expected. Please check the response.")
-        contents_translated.append(response.choices[0].message.content)
+        contents_translated.append(content_translated)
         print(f"    Original: {content}")
         print(f"    Translated: {contents_translated[-1]}")
+        print(f"    en ch ratio: {ratio}")
         num_tokens += response.usage.total_tokens
 
     contents_translated = [i.strip() for i in contents_translated]

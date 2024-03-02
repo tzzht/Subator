@@ -21,194 +21,175 @@ def ch_len(str):
         i += 1
     return length
 
-def split_content_according_to_pattern(content, pattern, verbose):
-    chunks = re.split(pattern, content)
+def split_sentence_according_to_pattern(sentence, pattern, verbose):
+    fragments = re.split(pattern, sentence)
     if verbose:
-        print(f"            Chunks after splitting by pattern: {chunks}")
-    # After splitting by pattern, there must be odd number of chunks
-    if len(chunks) % 2 == 0:
-        print(f"            Number of chunks after splitting by pattern is even")
+        print(f"            Fragments after splitting by pattern: {fragments}")
+    # After splitting by pattern, there must be odd number of fragments
+    if len(fragments) % 2 == 0:
+        print(f"            Number of fragments after splitting by pattern is even")
         exit(1)
-    last_chunk = chunks[-1]
-    chunks = [''.join(chunks) for chunks in zip(chunks[0::2], chunks[1::2])]
-    chunks.append(last_chunk)
-    chunks = [chunk for chunk in chunks if chunk]
+    last_fragment = fragments[-1]
+    fragments = [''.join(fragments) for fragments in zip(fragments[0::2], fragments[1::2])]
+    fragments.append(last_fragment)
+    fragments = [fragment for fragment in fragments if fragment]
     if verbose:
-        print(f"            Chunks after zipping: {chunks}")
-    return chunks
+        print(f"            Fragments after zipping: {fragments}")
+    return fragments
 
-def sep(chunk1, chunk2):
+def sep(span1, span2):
 
     no_sep_follow = [',', '.', '!', '?', ';', ':', "'", '"', "n't", "'s", '-', '%', ' ']
     no_sep_current = ['$', '-', ' ']
 
-    if chunk1 == '' or chunk2 == '':
+    if span1 == '' or span2 == '':
         return ''
     
-    if chunk1.endswith('gon') and chunk2.startswith('na'):
+    if span1.endswith('gon') and span2.startswith('na'):
         return ''
-    if not (chunk1[-1].isascii() and chunk2[0].isascii()):
-        return ''
-    
-    if chunk2.startswith(tuple(no_sep_follow)):
-        return ''
-    if chunk1.endswith(tuple(no_sep_current)):
+    if not (span1[-1].isascii() and span2[0].isascii()):
         return ''
     
-    if chunk2[0].isdigit() and chunk1[-1] == '.':
+    if span2.startswith(tuple(no_sep_follow)):
+        return ''
+    if span1.endswith(tuple(no_sep_current)):
+        return ''
+    
+    if span2[0].isdigit() and span1[-1] == '.':
         return ''
     return ' '
 
-
-def eliminate_punctuation(chunks):
+def eliminate_punctuation(fragments):
     punctuation_pattern = r'([。，！？；：“”《》、])'
-    chunks = [re.sub(punctuation_pattern, ' ', chunk) for chunk in chunks]
-    chunks = [chunk for chunk in chunks if chunk]
-    chunks = [chunk.strip() for chunk in chunks]
-    chunks = [chunk for chunk in chunks if chunk]
-    return chunks
+    fragments = [re.sub(punctuation_pattern, ' ', fragment) for fragment in fragments]
+    fragments = [fragment for fragment in fragments if fragment]
+    fragments = [fragment.strip() for fragment in fragments]
+    fragments = [fragment for fragment in fragments if fragment]
+    return fragments
 
-def merge_by_num(chunks, num_chunks, len_func, verbose):
+def merge_by_num(fragments, num_fragments, len_func, verbose):
     if verbose:
-        print(f"        Merging chunks by number: {chunks}")
+        print(f"        Merging fragments by number {num_fragments}: {fragments}")
 
-    i = 0
-    while i+1 < len(chunks):
-        if chunks[i+1] in [',', '.', '!', '?', ';', ':', "'", '"', '-', '%']:
-            chunks[i] = chunks[i] + chunks[i+1]
-            del chunks[i+1]
-        else:
-            i += 1
-
-    if len(chunks) < num_chunks:
-        print(f"        Number of chunks is less than {num_chunks}")
+    if len(fragments) < num_fragments:
+        print(f"        Number of fragments is less than {num_fragments}")
         exit(1)
 
-    while len(chunks) > num_chunks:
+    while len(fragments) > num_fragments:
         min_length = float('inf')
         min_index = -1
-        for i in range(len(chunks)-1):
-            if len_func(chunks[i]) + len_func(chunks[i+1]) < min_length:
-                min_length = len_func(chunks[i]) + len_func(chunks[i+1])
+        for i in range(len(fragments)-1):
+            if len_func(fragments[i]) + len_func(fragments[i+1]) < min_length:
+                min_length = len_func(fragments[i]) + len_func(fragments[i+1])
                 min_index = i
-        chunks[min_index] = chunks[min_index] + sep(chunks[min_index], chunks[min_index+1]) + chunks[min_index+1]
-        del chunks[min_index+1]
+        fragments[min_index] = fragments[min_index] + sep(fragments[min_index], fragments[min_index+1]) + fragments[min_index+1]
+        del fragments[min_index+1]
 
     if verbose:
-        print(f"        Chunks after merging: {chunks}")
-    return chunks
+        print(f"        Fragments after merging: {fragments}")
+    return fragments
 
-# i.e. Iteratively merge the two shortest consecutive chunks if the length of the merged chunk is less than 2/3 of the max length
-# If exists a chunks that is shorter than 1/6, merge them with preceding chunk unless the length of the merged chunk is longer than the max length
-def merge_by_length(chunks, MAX_CHUNK_LENGTH, len_func, verbose):
+# i.e. Iteratively merge the two shortest consecutive fragments if the length of the merged fragment is less than 2/3 of the MAX_FRAGMENT_LENGTH
+# If exists a fragment that is shorter than 1/6, merge them with preceding fragment unless the length of the merged fragment is longer than the MAX_FRAGMENT_LENGTH
+def merge_by_length(fragments, MAX_FRAGMENT_LENGTH, len_func, verbose):
     if verbose:
-        print(f"        Merging chunks by length: {chunks}")
+        print(f"        Merging fragments by length {MAX_FRAGMENT_LENGTH}: {fragments}")
     i = 0
-    while i+1 < len(chunks):
-        if chunks[i+1] in [',', '.', '!', '?', ';', ':', "'", '"', '-', '%']:
-            chunks[i] = chunks[i] + chunks[i+1]
-            del chunks[i+1]
-        else:
-            i += 1
 
-    if max([len_func(chunk) for chunk in chunks]) > MAX_CHUNK_LENGTH:
-        print(f'        Max chunk length is too long after merge punctuation')
+    if max([len_func(fragment) for fragment in fragments]) > MAX_FRAGMENT_LENGTH:
+        print(f'        Max fragment length is too long')
         exit(1)
 
     i = 0
-    while i+1 < len(chunks):
-        if len_func(chunks[i]) + len_func(chunks[i+1]) <= int(MAX_CHUNK_LENGTH * 0.8):
-            chunks[i] = chunks[i] + sep(chunks[i], chunks[i+1]) + chunks[i+1]
-            del chunks[i+1]
+    while i+1 < len(fragments):
+        if len_func(fragments[i]) + len_func(fragments[i+1]) <= int(MAX_FRAGMENT_LENGTH * 0.8):
+            fragments[i] = fragments[i] + sep(fragments[i], fragments[i+1]) + fragments[i+1]
+            del fragments[i+1]
         else:
             i += 1
     
     i = 0
-    while i+1 < len(chunks):
-        if (len_func(chunks[i]) < int(MAX_CHUNK_LENGTH * 0.3) or len_func(chunks[i+1]) < int(MAX_CHUNK_LENGTH * 0.3)) and len_func(chunks[i] + chunks[i+1]) <= MAX_CHUNK_LENGTH:
-            chunks[i] = chunks[i] + sep(chunks[i], chunks[i+1]) + chunks[i+1]
-            del chunks[i+1]
+    while i+1 < len(fragments):
+        if (len_func(fragments[i]) < int(MAX_FRAGMENT_LENGTH * 0.3) or len_func(fragments[i+1]) < int(MAX_FRAGMENT_LENGTH * 0.3)) and len_func(fragments[i] + fragments[i+1]) <= MAX_FRAGMENT_LENGTH:
+            fragments[i] = fragments[i] + sep(fragments[i], fragments[i+1]) + fragments[i+1]
+            del fragments[i+1]
         else:
             i += 1
-    # i = 0
-    # while i+1 < len(chunks):
-    #     if (len_func(chunks[i]) < int(MAX_CHUNK_LENGTH * 0.1) or len_func(chunks[i+1]) < int(MAX_CHUNK_LENGTH * 0.1)):
-    #         chunks[i] = chunks[i] + sep(chunks[i], chunks[i+1]) + chunks[i+1]
-    #         del chunks[i+1]
-    #     else:
-    #         i += 1
-
+   
     if verbose:
-        print(f"        Chunks after merging: {chunks}")
-    return chunks
+        print(f"        Fragments after merging: {fragments}")
+    return fragments
 
-
-def split_chunk(content, nlp, len_func, verbose):
-    print('using spacy')
-    if content == '':
-        print("        Empty content")
+def get_spans(sentence, nlp, verbose):
+    print('        using spacy to split the sentence into spans')
+    if sentence == '':
+        print("        Empty sentence")
         exit(1)
+    stop_sets = ['nsubj', 'dobj', 'prep', 'aux:asp', 'case', 'cop',  'advcl', 'punct', 'acomp'] # 
+    start_sets = ['cc']
+    doc = nlp(sentence)
 
-    if verbose:
-        print(f'        Split: {content}')
-    stop_sets = ['dobj', 'pobj', 'advcl', 'aux:asp', 'case', 'conj', 'mark', 'punct', 'acomp', 'ccomp'] # 
-    start_sets = ['cc', 'prep']
-    doc = nlp(content)
-    
     for token in doc:
         if verbose:
             print(f'        {token.text} -- {token.dep_}')
 
-    chunks = []
-    chunk = ''
+    if len(doc) < 2:
+        print(f'        Only one token in the sentence')
+        exit(1)
+
+    spans = []
+    span_start = 0
     for token in doc:
         if token.dep_ in stop_sets or token.is_sent_end:
-            chunk = chunk + sep(chunk, token.text) + token.text
-            chunks.append(chunk)
-            chunk = ''
+            span = doc[span_start:token.i+1]
+            spans.append(span.text)
+            span_start = token.i+1
         elif token.dep_ in start_sets or token.is_sent_start:
-            if chunk != '':
-                chunks.append(chunk)
-            chunk = token.text
-        else:
-            chunk = chunk + sep(chunk, token.text) + token.text
-    
-    if len(doc) < 2:
-        print(f'        Failed to split')
-        exit(1)
-    
+            if span_start != token.i:
+                span = doc[span_start:token.i]
+                spans.append(span.text)
+            span_start = token.i
+
     i = 0
-    while i+1 < len(chunks):
-        if chunks[i+1] in [',', '.', '!', '?', ';', ':', "'", '"', '-', '%']:
-            chunks[i] = chunks[i] + chunks[i+1]
-            del chunks[i+1]
+    while i+1 < len(spans):
+        if spans[i+1] in [',', '.', '!', '?', ';', ':', "'", '"', '-', '%']:
+            spans[i] = spans[i] + spans[i+1]
+            del spans[i+1]
         else:
             i += 1
 
-    if len(chunks) == 1:
-        print(f'        Spacy failed to split, force split into two chunks')
-        chunks = []
-        chunk = ''
-        for i in range(len(doc)//2):
-            chunk = chunk + sep(chunk, doc[i].text) + doc[i].text
-        chunks.append(chunk)
-        chunk = ''
-        for i in range(len(doc)//2, len(doc)):
-            chunk = chunk + sep(chunk, doc[i].text) + doc[i].text
-        chunks.append(chunk)
+    if len(spans) == 1:
+        # print(f'        Spacy failed to split, force split into two spans')
+        # spans = []
+        # span = doc[:len(doc)//2]
+        # spans.append(span.text)
+        # span = doc[len(doc)//2:]
+        # spans.append(span.text)
+        print(f'        Spacy failed to get the spans')
+        exit(1)
     
     if verbose:
-        print(f'        Split: {chunks}')
-    chunks = merge_by_num(chunks, 2, len_func, verbose)
-    return chunks     
+        print(f'        Spans: {spans}')
+    
+    return spans     
 
-def split_sentence_by_length(content, nlp, MAX_CHUNK_LENGTH, lang, verbose):
-    if content == '':
-        print("        Empty content")
+def split_fragment_into_two_fragments(sentence, nlp, len_func, verbose):
+    if sentence == '':
+        print("        Empty sentence")
         exit(1)
     if verbose:
-        print(f"        Sentence: {content}")
-        print(f"        Splitting sentence by max length: {MAX_CHUNK_LENGTH}")
+        print(f"        Splitting fragment: {sentence}")
+    spans = get_spans(sentence, nlp, verbose)
+    fragments = merge_by_num(spans, 2, len_func, verbose)
+    return fragments     
+
+def split_sentence_by_length(sentence, nlp, MAX_FRAGMENT_LENGTH, lang, verbose):
+    if sentence == '':
+        print("        Empty sentence")
+        exit(1)
+    if verbose:
+        print(f"        Sentence: {sentence}")
+        print(f"        Splitting sentence by max length: {MAX_FRAGMENT_LENGTH}")
     
     if lang == 'ch':
         len_func = ch_len
@@ -220,133 +201,175 @@ def split_sentence_by_length(content, nlp, MAX_CHUNK_LENGTH, lang, verbose):
         print(f"Invalid language: {lang}")
         exit(1)
 
-    if len_func(content) <= MAX_CHUNK_LENGTH:
+    if len_func(sentence) <= MAX_FRAGMENT_LENGTH:
         if verbose:
             print(f"        No need to split")
-            print(f"        Result: {content}")
-        return [content]
-    # First split the content according to punctuation
-    chunks = split_content_according_to_pattern(content, punctuation_pattern, verbose)
+            print(f"        Result: {sentence}")
+        return [sentence]
+    # First split the sentence according to punctuation
+    fragments = split_sentence_according_to_pattern(sentence, punctuation_pattern, verbose)
     if verbose:
-        print(f"        Chunks after splitting by punctuation: {chunks}")
+        print(f"        Fragments after splitting by punctuation: {fragments}")
 
-    # If still not satisfied the MAX_CHUNK_LENGTH condition
-    # Iteratively split the longest chunk into chunks that less than 2/3 of the max length using hanlp.
-    # If the iteration does not change the number of chunks, just throw an error
-    while max([len_func(chunk) for chunk in chunks]) > MAX_CHUNK_LENGTH:
-        new_chunks = []
-        for chunk in chunks:
-            if len_func(chunk) > MAX_CHUNK_LENGTH:
-                new_chunks.extend(split_chunk(chunk, nlp, len_func, verbose))
+    # If still not satisfied the MAX_FRAGMENT_LENGTH condition
+    # Iteratively split the longest fragment into fragments that less than MAX_FRAGMENT_LENGTH.
+    # If the iteration does not change the number of fragments, just throw an error
+    while max([len_func(fragment) for fragment in fragments]) > MAX_FRAGMENT_LENGTH:
+        new_fragments = []
+        for fragment in fragments:
+            if len_func(fragment) > MAX_FRAGMENT_LENGTH:
+                new_fragments.extend(split_fragment_into_two_fragments(fragment, nlp, len_func, verbose))
             else:
-                new_chunks.append(chunk)
-        chunks = new_chunks
+                new_fragments.append(fragment)
+        fragments = new_fragments
         if verbose:
-            print(f"        Chunks after iteration: {chunks}")
+            print(f"        Fragments after iteration: {fragments}")
 
-    # No chunks longer than MAX_CHUNK_LENGTH should exist
-    # Try to merge the chunks to satisfy the preferred condition
-    # Performing in-sentence merging first can make better chunking
-    chunks = merge_by_length(chunks, MAX_CHUNK_LENGTH, len_func, verbose)
+    # No fragments longer than MAX_FRAGMENT_LENGTH should exist
+    # Try to merge the fragments to satisfy the preferred condition
+    # Performing in-sentence merging first can make better fragments
+    fragments = merge_by_length(fragments, MAX_FRAGMENT_LENGTH, len_func, verbose)
 
     # Done
     if verbose:
-        print(f"        Result: {chunks}")
-    return chunks
+        print(f"        Result: {fragments}")
+    return fragments
 
-def split_chunks_by_num(chunks, nlp, num_chunks, len_func, verbose):
+def join_spans(spans, language):
+    result = spans[0]
+    for i in range(1, len(spans)):
+        if language == 'ch':
+            result += spans[i]
+        elif language == 'en':
+            result += sep(spans[i-1], spans[i]) + spans[i]
+        else:
+            print(f"Invalid language: {language}")
+            exit(1)
+    return result
+
+def divide_spans_into_fragments(spans, n, language):
+    if n <= 0 or len(spans) < n:
+        return []
+
+    def divide_helper(spans, n):
+        if n == 1:
+            yield [join_spans(spans, language)]
+            return
+
+        for i in range(1, len(spans)):
+            for rest in divide_helper(spans[i:], n - 1):
+                yield [join_spans(spans[:i], language)] + rest
+
+    return list(divide_helper(spans, n))
+
+def cal_loss(fragments, ratio, len_func):
+    ratio_sum = sum(ratio)
+    len_sentence = sum([len_func(fragment) for fragment in fragments])
+    loss = 0
+    for i in range(len(fragments)):
+        loss += abs(ratio[i]/ratio_sum - len_func(fragments[i])/len_sentence)
+    return loss
+
+def split_sentence_by_ratio(sentence, nlp, ratio, len_func, verbose):
+    language = 'ch' if len_func == ch_len else 'en'
+    
     if verbose:
-        print(f"        Splitting chunks by number {num_chunks}: ")
-        print(f"        {chunks}")
-    while len(chunks) < num_chunks + 1:
-        # Find the longest chunk
-        max_length = 0
-        max_index = -1
-        for i in range(len(chunks)):
-            if len_func(chunks[i]) > max_length:
-                max_length = len_func(chunks[i])
-                max_index = i
-        if verbose:
-            print(f"        Longest chunk: {chunks[max_index]}")
-        chunks = chunks[:max_index] + split_chunk(chunks[max_index], nlp, len_func, verbose) + chunks[max_index+1:]
-        if verbose:
-            print(f"        Chunks after iteration: {chunks}")
-    chunks = merge_by_num(chunks, num_chunks, len_func, verbose)
-    return chunks
+        print(f"        Splitting sentence by ratio: {ratio}")
+    spans = get_spans(sentence, nlp, verbose)
+    all_possible_fragments = divide_spans_into_fragments(spans, len(ratio), language)
 
+    min_loss = float('inf')
+    best_fragments_index = 0
+    for i, fragments in enumerate(all_possible_fragments):
+        loss = cal_loss(fragments, ratio, len_func)
+        if loss < min_loss:
+            min_loss = loss
+            best_fragments_index = i
+    if verbose:
+        print(f"        Best fragments: {all_possible_fragments[best_fragments_index]}")
+        print(f"        Loss: {min_loss}")
+    return all_possible_fragments[best_fragments_index]
 
-def split_content(ch_content, en_content, ch_nlp, en_nlp, MAX_CH_CHUNK_LENGTH, MAX_EN_CHUNK_LENGTH, verbose):
-    ch_chunks = []
-    en_chunks = []
+def get_ratio(spans, len_func):
+    len_sum = sum([len_func(span) for span in spans])
+    return [len_func(span)/len_sum for span in spans]
 
-    # If the length of the content is bigger than the MAX_CHUNK_LENGTH, split the content into smaller chunks
-    if ch_len(ch_content) > MAX_CH_CHUNK_LENGTH or len(en_content) > MAX_EN_CHUNK_LENGTH:
+def split_sentence(ch_sentence, en_sentence, ch_nlp, en_nlp, MAX_CH_FRAGMENT_LENGTH, MAX_EN_FRAGMENT_LENGTH, verbose):
+    ch_fragments = []
+    en_fragments = []
+
+    # If the length of the sentence is bigger than the MAX_FRAGMENT_LENGTH, split the sentence into smaller fragments
+    if ch_len(ch_sentence) > MAX_CH_FRAGMENT_LENGTH or len(en_sentence) > MAX_EN_FRAGMENT_LENGTH:
         if verbose:
-            if ch_len(ch_content) > MAX_CH_CHUNK_LENGTH:
-                print(f"    Chinese content length: {ch_len(ch_content)}, bigger than {MAX_CH_CHUNK_LENGTH}")
-            if len(en_content) > MAX_EN_CHUNK_LENGTH:
-                print(f"    English content length: {len(en_content)}, bigger than {MAX_EN_CHUNK_LENGTH}")
-        ch_chunks = split_sentence_by_length(ch_content, ch_nlp, MAX_CH_CHUNK_LENGTH, 'ch', verbose)
-        en_chunks = split_sentence_by_length(en_content, en_nlp, MAX_EN_CHUNK_LENGTH, 'en', verbose)
+            if ch_len(ch_sentence) > MAX_CH_FRAGMENT_LENGTH:
+                print(f"    Chinese sentence length: {ch_len(ch_sentence)}, bigger than {MAX_CH_FRAGMENT_LENGTH}")
+            if len(en_sentence) > MAX_EN_FRAGMENT_LENGTH:
+                print(f"    English sentence length: {len(en_sentence)}, bigger than {MAX_EN_FRAGMENT_LENGTH}")
+        ch_fragments = split_sentence_by_length(ch_sentence, ch_nlp, MAX_CH_FRAGMENT_LENGTH, 'ch', verbose)
+        en_fragments = split_sentence_by_length(en_sentence, en_nlp, MAX_EN_FRAGMENT_LENGTH, 'en', verbose)
         
-        while len(ch_chunks) > len(en_chunks):
-            en_chunks = split_chunks_by_num(en_chunks, en_nlp, len(ch_chunks), len, verbose)
-        while len(en_chunks) > len(ch_chunks):
-            ch_chunks = split_chunks_by_num(ch_chunks, ch_nlp, len(en_chunks), ch_len, verbose)
-    # No need to split the content
+        if len(ch_fragments) > len(en_fragments):
+            ratio = get_ratio(ch_fragments, ch_len)
+            en_fragments = split_sentence_by_ratio(en_sentence, en_nlp, ratio, len, verbose)
+        elif len(en_fragments) > len(ch_fragments):
+            ratio = get_ratio(en_fragments, len)
+            ch_fragments = split_sentence_by_ratio(ch_sentence, ch_nlp, ratio, ch_len, verbose)
+    # No need to split the sentence
     else:
-        print("No need to split the content")
-        ch_chunks.append(ch_content)
-        en_chunks.append(en_content)
-    return ch_chunks, en_chunks
+        print("No need to split the sentence")
+        ch_fragments.append(ch_sentence)
+        en_fragments.append(en_sentence)
+    return ch_fragments, en_fragments
 
 def spliter(en_path, ch_path, output_dir, verbose=False):
-    MAX_CH_CHUNK_LENGTH = 33
-    MAX_EN_CHUNK_LENGTH = 80
+    MAX_CH_FRAGMENT_LENGTH = 33
+    MAX_EN_FRAGMENT_LENGTH = 80
     # Read the English and Chinese sentences
-    en_contents = read_file(en_path)
-    ch_contents = read_file(ch_path)
-    if len(en_contents) != len(ch_contents):
-        print(f"Number of English contents ({len(en_contents)}) is not equal to the number of Chinese contents ({len(ch_contents)})")
+    en_sentences = read_file(en_path)
+    ch_sentences = read_file(ch_path)
+    if len(en_sentences) != len(ch_sentences):
+        print(f"Number of English sentences ({len(en_sentences)}) is not equal to the number of Chinese sentences ({len(ch_sentences)})")
         exit(1)
-    num_contents = len(en_contents)
+    num_sentences = len(en_sentences)
 
     # Load the spacy model
     en_nlp = spacy.load("en_core_web_trf")
     ch_nlp = spacy.load("zh_core_web_trf")
 
-    # Split the contents into chunks using spacy
-    en_contents_splited = []
-    ch_contents_splited = []
-    for i in range(num_contents):
-        print(f"Splitting content {i+1}/{num_contents}")
-        print(f"    {en_contents[i]}")
-        print(f"    {ch_contents[i]}")
-        ch_chunks, en_chunks = split_content(ch_contents[i], en_contents[i], ch_nlp, en_nlp, MAX_CH_CHUNK_LENGTH, MAX_EN_CHUNK_LENGTH, verbose)
-        ch_chunks = eliminate_punctuation(ch_chunks)
-        en_chunks = [chunk.strip() for chunk in en_chunks if chunk.strip()]
-        print(f"    Chunks: ")
-        print(f"    {ch_chunks}")
-        print(f"    {en_chunks}")
-        ch_contents_splited.extend(ch_chunks)
-        en_contents_splited.extend(en_chunks)
+    # Split the sentences into fragments using spacy
+    en_fragments = []
+    ch_fragments = []
+    for i in range(num_sentences):
+        print(f"Splitting sentence {i+1}/{num_sentences}")
+        ch_sentence = ch_sentences[i]
+        en_sentence = en_sentences[i]
+        print(f"    {en_sentences[i]}")
+        print(f"    {ch_sentences[i]}")
+        ch_sentence_splited, en_sentence_splited = split_sentence(ch_sentence, en_sentence, ch_nlp, en_nlp, MAX_CH_FRAGMENT_LENGTH, MAX_EN_FRAGMENT_LENGTH, verbose)
+        ch_sentence_splited = eliminate_punctuation(ch_sentence_splited)
+        en_sentence_splited = [fragment.strip() for fragment in en_sentence_splited if fragment.strip()]
+        print(f"    Fragments: ")
+        print(f"    {ch_sentence_splited}")
+        print(f"    {en_sentence_splited}")
+        ch_fragments.extend(ch_sentence_splited)
+        en_fragments.extend(en_sentence_splited)
 
-    # Write the splited contents to the output directory
+    # Write the splited sentences to the output directory
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     with open(os.path.join(output_dir, "en_splited.txt"), "w", encoding="utf-8") as f:
-        for chunk in en_contents_splited:
-            f.write(chunk + "\n")
+        for fragment in en_fragments:
+            f.write(fragment + "\n")
     with open(os.path.join(output_dir, "ch_splited.txt"), "w", encoding="utf-8") as f:
-        for chunk in ch_contents_splited:
-            f.write(chunk + "\n")
+        for fragment in ch_fragments:
+            f.write(fragment + "\n")
 
 
 if __name__ == "__main__":
     # Parse the command line arguments
-    parser = argparse.ArgumentParser(description="Slice the English and Chinese content")
-    parser.add_argument("--en_path", help="Path to the English content file", required=True)
-    parser.add_argument("--ch_path", help="Path to the Chinese content file", required=True)
+    parser = argparse.ArgumentParser(description="Slice the English and Chinese sentences into smaller fragments")
+    parser.add_argument("--en_path", help="Path to the English sentences file", required=True)
+    parser.add_argument("--ch_path", help="Path to the Chinese sentences file", required=True)
     parser.add_argument("--output_dir", help="Path to the output directory", required=True)
     parser.add_argument("--verbose", help="Print the debug information", action="store_true")
     args = parser.parse_args()
