@@ -63,19 +63,19 @@ audio_path = downloader.downloader(resouces_dir, audio_stream)
 print(f"Transcribe the audio from {audio_path}", file=sys.stderr)
 transcriber.transcriber(audio_path, resouces_dir, model_path)
 
-print("Transcription completed, please check if the transcription is correct. Press Enter to continue...", file=sys.stderr)
+print("Transcription completed, please check if the transcription is correct. \nPress Enter to continue...", file=sys.stderr)
 input("Press Enter to continue...")
 
 # Translate the video
 print(f"Translate the content from {resouces_dir}/audio.txt", file=sys.stderr)
 content_path = os.path.join(resouces_dir, 'audio.txt')
 
-prompt = '你是一名数码发烧友'
+prompt = '你是一名芯片专家'
 with open(api_key_path, 'r') as f:
     api_key = f.read()
 translator.translator(content_path, resouces_dir, api_key, prompt, llm)
 
-print('Translation completed, please check if the translation is correct. Search "Please check the response." in subator.log. Press Enter to continue...', file=sys.stderr)
+print('Translation completed, please check if the translation is correct. \nSearch "Please check the response." in subator.log. Then modify potentially erroneous lines in ch.txt. \nPress Enter to continue...', file=sys.stderr)
 input("Press Enter to continue...")
 
 # Split the content

@@ -97,6 +97,7 @@ def call_qwen_api(messages, api_key):
                 response.request_id, response.status_code,
                 response.code, response.message
             ))
+            content_translated = '调用Qwen API出错。'
     except Exception as e:
         print(f'    Error calling Qwen API: {e}')
         content_translated = '调用Qwen API出错。'
@@ -116,7 +117,7 @@ def call_glm_api(messages, api_key):
         content_translated = response.choices[0].message.content
         token_used = response.usage.total_tokens
     except Exception as e:
-        print(f'    Error calling GLM API: {e}')
+        print(f'    Please check the response. Error calling GLM API: {e}')
         content_translated = '调用GLM API出错。'
 
     return content_translated, token_used
@@ -174,7 +175,7 @@ def translate_all(contents, llm, api_key, user_prompt, WINDOW_SIZE=1):
 
 
 def translator(content_path, output_dir, api_key, user_prompt, llm):
-    WINDOW_SIZE = 2
+    WINDOW_SIZE = 1
     MAX_LINE_LENGTH = 80
     
     all_contents = get_content(content_path, MAX_LINE_LENGTH)
