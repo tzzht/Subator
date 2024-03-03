@@ -12,12 +12,14 @@ argparser.add_argument("--url", help="The url of the youtube video", required=Tr
 argparser.add_argument("--save_dir", help="The dir to save the output", required=True)
 argparser.add_argument("--model_path", help="The path to the model file", required=True)
 argparser.add_argument("--api_key_path", help="The path to the api key file", required=True)
+argparser.add_argument("--llm", help="The language model to use. [qwen, glm]", required=False, default="qwen")
 
 args = argparser.parse_args()
 url = args.url
 save_dir = args.save_dir
 model_path = args.model_path
 api_key_path = args.api_key_path
+llm = args.llm
 
 
 print(f"Start downloading the video from {url}", file=sys.stderr)
@@ -68,10 +70,10 @@ input("Press Enter to continue...")
 print(f"Translate the content from {resouces_dir}/audio.txt", file=sys.stderr)
 content_path = os.path.join(resouces_dir, 'audio.txt')
 
-prompt = '你是一名PC装机专家'
+prompt = '你是一名数码发烧友'
 with open(api_key_path, 'r') as f:
     api_key = f.read()
-translator.translator(content_path, resouces_dir, api_key, prompt)
+translator.translator(content_path, resouces_dir, api_key, prompt, llm)
 
 print('Translation completed, please check if the translation is correct. Search "Please check the response." in subator.log. Press Enter to continue...', file=sys.stderr)
 input("Press Enter to continue...")

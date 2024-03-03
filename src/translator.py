@@ -3,6 +3,9 @@ import argparse
 import sys
 import spacy
 from zhipuai import ZhipuAI
+import random
+from http import HTTPStatus
+import dashscope
 
 def merge_short_lines(contents, MAX_LINE_LENGTH):
     i = 0
@@ -63,6 +66,7 @@ def get_content(content_path, MAX_LINE_LENGTH):
             chunks.append(span.text)
             for chunk in chunks:
                 print(f"    Split sentence: {chunk}")
+            print(f"    Longest fragment: {max([len(i) for i in chunks])}")
             sentences.extend(chunks)
         else:
             sentences.append(sent.text)
@@ -72,39 +76,96 @@ def get_content(content_path, MAX_LINE_LENGTH):
     # Merge short lines
     return merge_short_lines(sentences, MAX_LINE_LENGTH)
 
-def translate_all(contents, client, user_prompt, WINDOW_SIZE=2):
+def call_qwen_api(messages, api_key):
+    print("    Calling Qwen API")
+    content_translated = ''
+    token_used = 0
+    try:
+        dashscope.api_key = api_key
+        response = dashscope.Generation.call(
+            model='qwen-max',
+            messages=messages,
+            # set the random seed, optional, default to 1234 if not set
+            # seed=random.randint(1, 10000),
+            result_format='message',  # set the result to be "message" format.
+        )
+        if response.status_code == HTTPStatus.OK:
+            content_translated = response.output.choices[0].message.content
+            token_used = response.usage.total_tokens
+        else:
+            print('Request id: %s, Status code: %s, error code: %s, error message: %s' % (
+                response.request_id, response.status_code,
+                response.code, response.message
+            ))
+    except Exception as e:
+        print(f'    Error calling Qwen API: {e}')
+        content_translated = '调用Qwen API出错。'
+
+    return content_translated, token_used
+
+def call_glm_api(messages, api_key):
+    print("    Calling GLM API")
+    content_translated = ''
+    token_used = 0
+    try:
+        client = ZhipuAI(api_key=api_key) # replace with your own API key
+        response = client.chat.completions.create(
+            model="glm-4",  # model name
+            messages=messages,  # messages
+        )
+        content_translated = response.choices[0].message.content
+        token_used = response.usage.total_tokens
+    except Exception as e:
+        print(f'    Error calling GLM API: {e}')
+        content_translated = '调用GLM API出错。'
+
+    return content_translated, token_used
+
+def translate_all(contents, llm, api_key, user_prompt, WINDOW_SIZE=1):
     num_tokens = 0
-    window_contents = []
-    window_contents_str = ' '.join(window_contents)
+    window_contents_before = []
+    window_contents_before_str = ''
+    window_contents_after = []
+    window_contents_after_str = ''
     # Call the API to translate the contents
     contents_translated = []
     for i, content in enumerate(contents):
         print(f"Translating content {i+1}/{len(contents)}:")
-        if i >= WINDOW_SIZE:
-            window_contents = contents[i-WINDOW_SIZE:i]
-            window_contents_str = ' '.join(window_contents)
-        window_contents_str = window_contents_str.replace('\n', ' ')
-        call_contents = f"你是一名翻译专家。请保留原文的思想内涵和语义逻辑，使用地道流畅简洁的语言表达，可以意译，避免生硬翻译。人名和地名等专有名词不要翻译。{user_prompt}。这是前文，翻译结果中不要包含它的翻译：{window_contents_str}。请将下面这句英文翻译为中文，请直接告诉我翻译结果，不要添加任何补充说明。：{content}"
-        print(f"Call contents: {call_contents}")
-        # Call the API to translate the content
-        response = client.chat.completions.create(
-            model="glm-4",  # model name
-            messages=[
-                {"role": "user", "content": call_contents,}
-            ],
-        )
         
-        content_translated = response.choices[0].message.content
+        if i >= WINDOW_SIZE and i < len(contents)-WINDOW_SIZE:
+            window_contents_before = contents[i-WINDOW_SIZE:i]
+            window_contents_before_str = ' '.join(window_contents_before)
+            window_contents_after = contents[i+1:i+1+WINDOW_SIZE]
+            window_contents_after_str = ' '.join(window_contents_after)
+        else:
+            window_contents_before = []
+            window_contents_before_str = ''
+            window_contents_after = []
+            window_contents_after_str = ''
+        
+        system_contents = f"你是一名翻译专家。请保留原文的思想内涵和语义逻辑，使用地道流畅简洁的语言表达，可以意译，避免生硬翻译。人名和地名等专有名词不要翻译。{user_prompt}。"
+        user_contents = f"这是上文：{window_contents_before_str}。这是下文：{window_contents_after_str}。请将下面这句英文翻译为中文，翻译结果中不要包含上下文，请直接告诉我翻译结果，不要添加任何补充说明：{content}"
+        print(f"    Calling API with content: {system_contents} {user_contents}")
+        
+        if llm == "qwen":
+            content_translated, token_used = call_qwen_api([{"role": "system", "content": system_contents}, {"role": "user", "content": user_contents}], api_key)
+        elif llm == "glm":
+            content_translated, token_used = call_glm_api([{"role": "system", "content": system_contents}, {"role": "user", "content": user_contents}], api_key)
+        else:
+            print(f"    Invalid llm: {llm}")
+            exit(1)
+
         ratio = len(content_translated)/len(content.split())
         if '\n' in content_translated:
             print(f"    Response contains multiple lines. Please check the response.")
         if ratio > 2.4:
             print(f"    Response is longer than expected. Please check the response.")
-        contents_translated.append(content_translated)
+        
+        contents_translated.append(content_translated.replace("您", "你"))
         print(f"    Original: {content}")
         print(f"    Translated: {contents_translated[-1]}")
         print(f"    en ch ratio: {ratio}")
-        num_tokens += response.usage.total_tokens
+        num_tokens += token_used
 
     contents_translated = [i.strip() for i in contents_translated]
     
@@ -112,7 +173,7 @@ def translate_all(contents, client, user_prompt, WINDOW_SIZE=2):
         
 
 
-def translator(content_path, output_dir, api_key, user_prompt=''):
+def translator(content_path, output_dir, api_key, user_prompt, llm):
     WINDOW_SIZE = 2
     MAX_LINE_LENGTH = 80
     
@@ -126,11 +187,7 @@ def translator(content_path, output_dir, api_key, user_prompt=''):
         for content in all_contents:
             f.write(content + '\n')
 
-    # ZhipuAI API
-    client = ZhipuAI(api_key=api_key) # replace with your own API key
-    tot_tokens = 0
-    all_contents_translated = []
-    all_contents_translated, tot_tokens = translate_all(all_contents, client, user_prompt, WINDOW_SIZE)
+    all_contents_translated, tot_tokens = translate_all(all_contents, llm, api_key,user_prompt, WINDOW_SIZE)
 
     # Write the translated content to a file
     output_file = os.path.join(output_dir, "ch.txt")

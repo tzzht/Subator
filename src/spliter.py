@@ -64,7 +64,6 @@ def eliminate_punctuation(fragments):
     fragments = [re.sub(punctuation_pattern, ' ', fragment) for fragment in fragments]
     fragments = [fragment for fragment in fragments if fragment]
     fragments = [fragment.strip() for fragment in fragments]
-    fragments = [fragment for fragment in fragments if fragment]
     return fragments
 
 def merge_by_num(fragments, num_fragments, len_func, verbose):
@@ -120,12 +119,12 @@ def merge_by_length(fragments, MAX_FRAGMENT_LENGTH, len_func, verbose):
         print(f"        Fragments after merging: {fragments}")
     return fragments
 
-def get_spans(sentence, nlp, verbose):
+def get_spans(sentence, nlp, len_func, verbose):
     print('        using spacy to split the sentence into spans')
     if sentence == '':
         print("        Empty sentence")
         exit(1)
-    stop_sets = ['nsubj', 'dobj', 'prep', 'aux:asp', 'case', 'cop',  'advcl', 'punct', 'acomp'] # 
+    stop_sets = ['nsubj', 'dobj', 'prep', 'aux:asp', 'case', 'cop',  'advcl', 'punct', 'acomp', 'mark', 'nsubjpass', 'agent', 'dep'] # 
     start_sets = ['cc']
     doc = nlp(sentence)
 
@@ -159,15 +158,15 @@ def get_spans(sentence, nlp, verbose):
             i += 1
 
     if len(spans) == 1:
-        # print(f'        Spacy failed to split, force split into two spans')
-        # spans = []
-        # span = doc[:len(doc)//2]
-        # spans.append(span.text)
-        # span = doc[len(doc)//2:]
-        # spans.append(span.text)
         print(f'        Spacy failed to get the spans')
         exit(1)
     
+    # do some merge, because the size of all_possible_fragments is exponential to the number of spans
+    # ...
+    if len(spans) > 20:
+        print(f'        Too much spans {len(spans)}, merge to 20')
+        spans = merge_by_num(spans, 20, len_func, verbose)
+        
     if verbose:
         print(f'        Spans: {spans}')
     
@@ -179,7 +178,7 @@ def split_fragment_into_two_fragments(sentence, nlp, len_func, verbose):
         exit(1)
     if verbose:
         print(f"        Splitting fragment: {sentence}")
-    spans = get_spans(sentence, nlp, verbose)
+    spans = get_spans(sentence, nlp, len_func, verbose)
     fragments = merge_by_num(spans, 2, len_func, verbose)
     return fragments     
 
@@ -275,7 +274,7 @@ def split_sentence_by_ratio(sentence, nlp, ratio, len_func, verbose):
     
     if verbose:
         print(f"        Splitting sentence by ratio: {ratio}")
-    spans = get_spans(sentence, nlp, verbose)
+    spans = get_spans(sentence, nlp, len_func, verbose)
     all_possible_fragments = divide_spans_into_fragments(spans, len(ratio), language)
 
     min_loss = float('inf')
