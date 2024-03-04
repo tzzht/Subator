@@ -16,6 +16,9 @@ def load_json(file_path):
     all_start_times = []
     all_end_times = []
     for i, word in enumerate(word_dict):
+        # Handle the bug of WhisperX
+        if word["word"] == 'JR.:':
+            word["word"] = 'JR.'
         all_words.append(word["word"])
         if 'start' in word:
             all_start_times.append(word["start"])
@@ -35,27 +38,8 @@ def load_json(file_path):
         print(f"Length of words ({len(all_words)}), start times ({len(all_start_times)}), and end times ({len(all_end_times)}) do not match.")
         exit(1)
     
-    # for i in range(len(all_words)):
-    #     if all_start_times[i] is None:
-    #         if i == 0:
-    #             all_start_times[i] = 0
-    #         else:
-    #             all_start_times[i] = all_end_times[i-1]
-    #         # print(f"Setting start time for word {all_words[i]} to {all_start_times[i]}")
-    #     if all_end_times[i] is None:
-    #         if i == len(all_words) - 1:
-    #             all_end_times[i] = all_start_times[i] + 1
-    #         else:
-    #             for j in range(i+1, len(all_words)):
-    #                 if all_start_times[j] is not None:
-    #                     all_end_times[i] = all_start_times[j]
-    #                     break
-    #         # print(f"Setting end time for word {all_words[i]} to {all_end_times[i]}")
-
-    # if len(all_words) != len(all_start_times) or len(all_words) != len(all_end_times):
-    #     print(f"Length of words ({len(all_words)}), start times ({len(all_start_times)}), and end times ({len(all_end_times)}) do not match.")
-    #     exit(1)
-
+    for i in range(len(all_words)):
+        print(f'{all_words[i]}: {all_start_times[i]} - {all_end_times[i]}')
     return all_words, all_start_times, all_end_times
 
 
@@ -65,9 +49,6 @@ def read_file(file_path):
     
    
 def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
-    # Load the JSON file
-    all_words, words_start_times, words_end_times = load_json(json_file_path)
-    
     # Read the English and Chinese content
     en_contents = read_file(en_file_path)
     ch_contents = read_file(ch_file_path)
@@ -75,29 +56,40 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     if len(en_contents) != len(ch_contents):
         print(f"Length of English contents ({len(en_contents)}) and Chinese contents ({len(ch_contents)}) do not match.")
         exit(1)
+
+    # Load the JSON file
+    all_words, words_start_times, words_end_times = load_json(json_file_path)
     
+    old_all_words = all_words.copy()
+    old_word_start_times = words_start_times.copy()
+    old_word_end_times = words_end_times.copy()
 
     # Check if contents are matched with the words
     i = 0
     for content in en_contents:
         content_words = content.split(' ')
         for content_word in content_words:
-            # print(f'Checking the word: {content_word} with the word: {all_words[i]}')
+            print(f'Checking the word: {content_word} with the word: {all_words[i]}')
             if content_word != all_words[i]:
                 print(f'In the content: {content}, the word: {content_word} does not match with the word: {all_words[i]}')
                 print(f'content_word: {content_word}, all_words[i]: {all_words[i]}, all_words[i+1]: {all_words[i+1]}')
                 # spacy will tokenize content. Words like aa-aa may be multiple tokens. Here is a bypass way
                 if all_words[i].startswith(content_word):
-                    print(f"Word '{all_words[i]}' starts with the content word '{content_word}'")
+                    print(f"Word '{all_words[i]}' in the word list starts with the word '{content_word}' in the content")
+                    print(f"Split the word '{all_words[i]}' into '{content_word}' and '{all_words[i][len(content_word):]}'")
                     all_words.insert(i+1, all_words[i][len(content_word):])
                     all_words[i] = content_word
                     words_start_times.insert(i+1, words_start_times[i])
                     words_end_times.insert(i+1, words_end_times[i])
                 # spacy will tokenize content. So, we can't distinguish between digit. digit with digit.digit, here is a bypass way
                 elif content_word.startswith(all_words[i]):
-                    content = content.replace(content_word, content_word[:len(all_words[i])] + ' ' + content_word[len(all_words[i]):], 1)
-                    print(f"content: {content}")
-                    i += 1
+                    print(f"Word '{content_word}' in the content starts with the word '{all_words[i]}' in the word list")
+                    print(f"Merging the word '{all_words[i]}' and '{all_words[i+1]}' into {all_words[i]+all_words[i+1]}")
+                    all_words[i] = all_words[i] + all_words[i+1]
+                    all_words.pop(i+1)
+                    words_end_times[i] = words_end_times[i+1]
+                    words_start_times.pop(i+1)
+                    words_end_times.pop(i+1)
                 else:
                     print(f"Can't find the word '{content_word}' in the word list")
                     exit(1)
@@ -105,6 +97,27 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     
     print("All words are matched with the contents")
     
+    i = 0
+    j = 0
+    while i < len(old_all_words) and j < len(all_words):
+        # print(f"{i}: {old_all_words[i]} : {old_word_start_times[i]} - {old_word_end_times[i]}")
+        # print(f"{j}: {all_words[j]} : {words_start_times[j]} - {words_end_times[j]}")
+        if old_all_words[i] == all_words[j]:
+            i += 1
+            j += 1
+        else:
+            if old_all_words[i].startswith(all_words[j]):
+                # print(f"{old_all_words[i]} starts with {all_words[j]}")
+                old_all_words[i] = old_all_words[i][len(all_words[j]):]
+                j += 1
+            elif all_words[j].startswith(old_all_words[i]):
+                # print(f"{all_words[j]} starts with {old_all_words[i]}")
+                all_words[j] = all_words[j][len(old_all_words[i]):]
+                i += 1
+            else:
+                print(f"Mismatch: {old_all_words[i]} and {all_words[j]}")
+                exit(1)
+
     # Get the start and end times of the contents
     contents_start_times = []
     contents_end_times = []

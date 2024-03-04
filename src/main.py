@@ -7,7 +7,7 @@ import os
 import argparse
 import sys
 
-argparser = argparse.ArgumentParser(description="Download, transcribe, translate, split, and align the content")
+argparser = argparse.ArgumentParser(description="Download, transcribe, translate, split, and align the fragments")
 argparser.add_argument("--url", help="The url of the youtube video", required=True)
 argparser.add_argument("--save_dir", help="The dir to save the output", required=True)
 argparser.add_argument("--model_path", help="The path to the model file", required=True)
@@ -67,25 +67,25 @@ print("Transcription completed, please check if the transcription is correct. \n
 input("Press Enter to continue...")
 
 # Translate the video
-print(f"Translate the content from {resouces_dir}/audio.txt", file=sys.stderr)
-content_path = os.path.join(resouces_dir, 'audio.txt')
+print(f"Translate the sentences from {resouces_dir}/audio.txt", file=sys.stderr)
+sentences_file_path = os.path.join(resouces_dir, 'audio.txt')
 
-prompt = '你是一名芯片专家'
+prompt = '你是一名RISC-V专家'
 with open(api_key_path, 'r') as f:
     api_key = f.read()
-translator.translator(content_path, resouces_dir, api_key, prompt, llm)
+translator.translator(sentences_file_path, resouces_dir, api_key, prompt, llm)
 
 print('Translation completed, please check if the translation is correct. \nSearch "Please check the response." in subator.log. Then modify potentially erroneous lines in ch.txt. \nPress Enter to continue...', file=sys.stderr)
 input("Press Enter to continue...")
 
-# Split the content
-print(f"Split the content from {resouces_dir}/en.txt and {resouces_dir}/ch.txt", file=sys.stderr)
+# Split the sentences
+print(f"Split the sentences from {resouces_dir}/en.txt and {resouces_dir}/ch.txt", file=sys.stderr)
 en_path = os.path.join(resouces_dir, 'en.txt')
 ch_path = os.path.join(resouces_dir, 'ch.txt')
 spliter.spliter(en_path, ch_path, resouces_dir, True)
 
-# Align the content
-print(f"Align the content from {resouces_dir}/audio.json, {resouces_dir}/en_splited.txt, and {resouces_dir}/ch_splited.txt", file=sys.stderr)
+# Align the fragments
+print(f"Align the fragments from {resouces_dir}/audio.json, {resouces_dir}/en_splited.txt, and {resouces_dir}/ch_splited.txt", file=sys.stderr)
 json_file_path = os.path.join(resouces_dir, 'audio.json')
 splited_en_path = os.path.join(resouces_dir, 'en_splited.txt')
 splited_ch_path = os.path.join(resouces_dir, 'ch_splited.txt')

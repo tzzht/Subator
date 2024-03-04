@@ -119,7 +119,7 @@ def merge_by_length(fragments, MAX_FRAGMENT_LENGTH, len_func, verbose):
         print(f"        Fragments after merging: {fragments}")
     return fragments
 
-def get_spans(sentence, nlp, len_func, verbose):
+def get_spans(sentence, nlp, len_func, MAX_FRAGMENT_LENGTH, verbose):
     print('        using spacy to split the sentence into spans')
     if sentence == '':
         print("        Empty sentence")
@@ -139,7 +139,13 @@ def get_spans(sentence, nlp, len_func, verbose):
     spans = []
     span_start = 0
     for token in doc:
-        if token.dep_ in stop_sets or token.is_sent_end:
+        if token.is_sent_end:
+            span = doc[span_start:token.i+1]
+            spans.append(span.text)
+            span_start = token.i+1
+        elif token.dep_ in stop_sets:
+            if token.text == '-' or (token.i+1 < len(doc) and doc[token.i+1].text == '-'):
+                continue
             span = doc[span_start:token.i+1]
             spans.append(span.text)
             span_start = token.i+1
@@ -166,19 +172,24 @@ def get_spans(sentence, nlp, len_func, verbose):
     if len(spans) > 20:
         print(f'        Too much spans {len(spans)}, merge to 20')
         spans = merge_by_num(spans, 20, len_func, verbose)
-        
+    
+    for i in range(len(spans)):
+        if len_func(spans[i]) > MAX_FRAGMENT_LENGTH:
+            print(f'        Span {i} is too long: {len_func(spans[i])}')
+            exit(1)
+
     if verbose:
         print(f'        Spans: {spans}')
     
     return spans     
 
-def split_fragment_into_two_fragments(sentence, nlp, len_func, verbose):
+def split_fragment_into_two_fragments(sentence, nlp, len_func, MAX_FRAGMENT_LENGTH, verbose):
     if sentence == '':
         print("        Empty sentence")
         exit(1)
     if verbose:
         print(f"        Splitting fragment: {sentence}")
-    spans = get_spans(sentence, nlp, len_func, verbose)
+    spans = get_spans(sentence, nlp, len_func, MAX_FRAGMENT_LENGTH, verbose)
     fragments = merge_by_num(spans, 2, len_func, verbose)
     return fragments     
 
@@ -217,7 +228,7 @@ def split_sentence_by_length(sentence, nlp, MAX_FRAGMENT_LENGTH, lang, verbose):
         new_fragments = []
         for fragment in fragments:
             if len_func(fragment) > MAX_FRAGMENT_LENGTH:
-                new_fragments.extend(split_fragment_into_two_fragments(fragment, nlp, len_func, verbose))
+                new_fragments.extend(split_fragment_into_two_fragments(fragment, nlp, len_func, MAX_FRAGMENT_LENGTH, verbose))
             else:
                 new_fragments.append(fragment)
         fragments = new_fragments
@@ -261,26 +272,28 @@ def divide_spans_into_fragments(spans, n, language):
 
     return list(divide_helper(spans, n))
 
-def cal_loss(fragments, ratio, len_func):
+def cal_loss(fragments, ratio, len_func, MAX_FRAGMENT_LENGTH):
     ratio_sum = sum(ratio)
     len_sentence = sum([len_func(fragment) for fragment in fragments])
     loss = 0
     for i in range(len(fragments)):
         loss += abs(ratio[i]/ratio_sum - len_func(fragments[i])/len_sentence)
+        if len_func(fragments[i]) > MAX_FRAGMENT_LENGTH:
+            loss += 1
     return loss
 
-def split_sentence_by_ratio(sentence, nlp, ratio, len_func, verbose):
+def split_sentence_by_ratio(sentence, nlp, ratio, len_func, MAX_FRAGMENT_LENGTH, verbose):
     language = 'ch' if len_func == ch_len else 'en'
     
     if verbose:
         print(f"        Splitting sentence by ratio: {ratio}")
-    spans = get_spans(sentence, nlp, len_func, verbose)
+    spans = get_spans(sentence, nlp, len_func, MAX_FRAGMENT_LENGTH, verbose)
     all_possible_fragments = divide_spans_into_fragments(spans, len(ratio), language)
 
     min_loss = float('inf')
     best_fragments_index = 0
     for i, fragments in enumerate(all_possible_fragments):
-        loss = cal_loss(fragments, ratio, len_func)
+        loss = cal_loss(fragments, ratio, len_func, MAX_FRAGMENT_LENGTH)
         if loss < min_loss:
             min_loss = loss
             best_fragments_index = i
@@ -307,12 +320,12 @@ def split_sentence(ch_sentence, en_sentence, ch_nlp, en_nlp, MAX_CH_FRAGMENT_LEN
         ch_fragments = split_sentence_by_length(ch_sentence, ch_nlp, MAX_CH_FRAGMENT_LENGTH, 'ch', verbose)
         en_fragments = split_sentence_by_length(en_sentence, en_nlp, MAX_EN_FRAGMENT_LENGTH, 'en', verbose)
         
-        if len(ch_fragments) > len(en_fragments):
+        if len(ch_fragments) >= len(en_fragments):
             ratio = get_ratio(ch_fragments, ch_len)
-            en_fragments = split_sentence_by_ratio(en_sentence, en_nlp, ratio, len, verbose)
+            en_fragments = split_sentence_by_ratio(en_sentence, en_nlp, ratio, len, MAX_EN_FRAGMENT_LENGTH, verbose)
         elif len(en_fragments) > len(ch_fragments):
             ratio = get_ratio(en_fragments, len)
-            ch_fragments = split_sentence_by_ratio(ch_sentence, ch_nlp, ratio, ch_len, verbose)
+            ch_fragments = split_sentence_by_ratio(ch_sentence, ch_nlp, ratio, ch_len, MAX_CH_FRAGMENT_LENGTH, verbose)
     # No need to split the sentence
     else:
         print("No need to split the sentence")
