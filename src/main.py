@@ -21,74 +21,43 @@ model_path = args.model_path
 api_key_path = args.api_key_path
 llm = args.llm
 
-
-print(f"Start downloading the video from {url}", file=sys.stderr)
-# Get the video info
-yt = downloader.get_video_info(url)
-
-# Get the directory to save the outputs, the directory is save_dir/video_author/video_title
-video_author = ''.join(e for e in yt.author if e.isalnum())
-video_title = ''.join(e for e in yt.title if e.isalnum())
-save_dir = os.path.join(save_dir, video_author, video_title)
-resouces_dir = os.path.join(save_dir, "resources")
-
-# Download the streams
-print(f"Save the resources to {resouces_dir}")
-# get the streams, filter the video and audio streams
-# the video streams are filtered by the type="video", mime_type="video/webm", res="1080p", progressive=False
-# the audio streams are filtered by the type="audio", mime_type="audio/webm", abr="160kbps"
-streams = yt.streams
-video_streams = streams.filter(type="video", mime_type="video/webm", res="1080p", progressive=False)
-audio_streams = streams.filter(type="audio", mime_type="audio/webm", abr="160kbps")
-# if the video or audio streams are not found, print the error message
-if len(video_streams) == 0:
-    print("Video stream is not found, please input the itag of the video stream", file=sys.stderr)
-    itag = int(input("Please input the itag of the video stream: "))
-    video_stream = streams.get_by_itag(itag)
-else:
-    video_stream = video_streams[0]
-
-if len(audio_streams) == 0:
-    print("Audio stream is not found, please input the itag of the audio stream", file=sys.stderr)
-    itag = int(input("Please input the itag of the audio stream: "))
-    audio_stream = streams.get_by_itag(itag)
-else:
-    audio_stream = audio_streams[0]
-
-# download the video and audio streams
-video_path = downloader.downloader(resouces_dir, video_stream)
-audio_path = downloader.downloader(resouces_dir, audio_stream)
+# Download the video
+print(f"Start downloading the video from {url}")
+video_path, audio_path, resouces_dir = downloader.downloader(url, save_dir)
 
 # Transcribe the video
-print(f"Transcribe the audio from {audio_path}", file=sys.stderr)
+print(f"Transcribe the audio from {audio_path}")
 transcriber.transcriber(audio_path, resouces_dir, model_path)
 
-print("Transcription completed, please check if the transcription is correct. \nPress Enter to continue...", file=sys.stderr)
+print("Transcription completed, please check if the transcription is correct.")
 input("Press Enter to continue...")
 
 # Translate the video
-print(f"Translate the sentences from {resouces_dir}/audio.txt", file=sys.stderr)
+print(f"Translate the sentences from {resouces_dir}/audio.txt")
 sentences_file_path = os.path.join(resouces_dir, 'audio.txt')
 
-prompt = '你是一名RISC-V专家'
+prompt = '你是一名全栈工程师'
 with open(api_key_path, 'r') as f:
     api_key = f.read()
 translator.translator(sentences_file_path, resouces_dir, api_key, prompt, llm)
 
-print('Translation completed, please check if the translation is correct. \nSearch "Please check the response." in subator.log. Then modify potentially erroneous lines in ch.txt. \nPress Enter to continue...', file=sys.stderr)
+print('Translation completed, please check if the translation is correct. \nSearch "Please check the response." in translator.log. Then modify potentially erroneous lines in ch.txt.')
 input("Press Enter to continue...")
 
 # Split the sentences
-print(f"Split the sentences from {resouces_dir}/en.txt and {resouces_dir}/ch.txt", file=sys.stderr)
+print(f"Split the sentences from {resouces_dir}/en.txt and {resouces_dir}/ch.txt")
 en_path = os.path.join(resouces_dir, 'en.txt')
 ch_path = os.path.join(resouces_dir, 'ch.txt')
-spliter.spliter(en_path, ch_path, resouces_dir, True)
+spliter.spliter(en_path, ch_path, resouces_dir)
 
 # Align the fragments
-print(f"Align the fragments from {resouces_dir}/audio.json, {resouces_dir}/en_splited.txt, and {resouces_dir}/ch_splited.txt", file=sys.stderr)
+print(f"Align the fragments from {resouces_dir}/audio.json, {resouces_dir}/en_splited.txt, and {resouces_dir}/ch_splited.txt")
 json_file_path = os.path.join(resouces_dir, 'audio.json')
 splited_en_path = os.path.join(resouces_dir, 'en_splited.txt')
 splited_ch_path = os.path.join(resouces_dir, 'ch_splited.txt')
-aligner.aligner(json_file_path, splited_en_path, splited_ch_path, save_dir)
+aligner.aligner(json_file_path, splited_en_path, splited_ch_path, os.path.join(resouces_dir, '..'))
 
-print(f"Subtitles are saved to {save_dir}.", file=sys.stderr)
+# Copy log files to resources_dir
+os.system(f"cp ./translator.log {resouces_dir}")
+os.system(f"cp ./spliter.log {resouces_dir}")
+os.system(f"cp ./aligner.log {resouces_dir}")

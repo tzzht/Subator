@@ -2,8 +2,19 @@ import json
 import os
 import argparse
 import srt
-import re
 from datetime import timedelta
+import sys
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler(f"{__name__}.log", mode="w", encoding="utf-8")
+# formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
+
 
 def load_json(file_path):
     # Load the JSON file
@@ -23,7 +34,7 @@ def load_json(file_path):
         if 'start' in word:
             all_start_times.append(word["start"])
         else:
-            print(f"Start time not found for word {i+1}: {word}")
+            logger.debug(f"Start time not found for word {i+1}: {word}")
             if i == 0:
                 all_start_times.append(0)
             else:
@@ -31,15 +42,15 @@ def load_json(file_path):
         if 'end' in word:
             all_end_times.append(word["end"])
         else:
-            print(f"End time not found for word {i+1}: {word}")
+            logger.debug(f"End time not found for word {i+1}: {word}")
             all_end_times.append(None)
     
     if len(all_words) != len(all_start_times) or len(all_words) != len(all_end_times):
-        print(f"Length of words ({len(all_words)}), start times ({len(all_start_times)}), and end times ({len(all_end_times)}) do not match.")
+        logger.error(f"Length of words ({len(all_words)}), start times ({len(all_start_times)}), and end times ({len(all_end_times)}) do not match.")
         exit(1)
     
-    for i in range(len(all_words)):
-        print(f'{all_words[i]}: {all_start_times[i]} - {all_end_times[i]}')
+    # for i in range(len(all_words)):
+    #     logger.debug(f'{all_words[i]}: {all_start_times[i]} - {all_end_times[i]}')
     return all_words, all_start_times, all_end_times
 
 
@@ -54,7 +65,7 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     ch_contents = read_file(ch_file_path)
     
     if len(en_contents) != len(ch_contents):
-        print(f"Length of English contents ({len(en_contents)}) and Chinese contents ({len(ch_contents)}) do not match.")
+        logger.error(f"Length of English contents ({len(en_contents)}) and Chinese contents ({len(ch_contents)}) do not match.")
         exit(1)
 
     # Load the JSON file
@@ -69,53 +80,53 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     for content in en_contents:
         content_words = content.split(' ')
         for content_word in content_words:
-            print(f'Checking the word: {content_word} with the word: {all_words[i]}')
+            logger.debug(f'Checking the word: {content_word} with the word: {all_words[i]}')
             if content_word != all_words[i]:
-                print(f'In the content: {content}, the word: {content_word} does not match with the word: {all_words[i]}')
-                print(f'content_word: {content_word}, all_words[i]: {all_words[i]}, all_words[i+1]: {all_words[i+1]}')
+                logger.debug(f'    In the content: {content}, the word: {content_word} does not match with the word: {all_words[i]}')
+                logger.debug(f'    content_word: {content_word}, all_words[i]: {all_words[i]}, all_words[i+1]: {all_words[i+1]}')
                 # spacy will tokenize content. Words like aa-aa may be multiple tokens. Here is a bypass way
                 if all_words[i].startswith(content_word):
-                    print(f"Word '{all_words[i]}' in the word list starts with the word '{content_word}' in the content")
-                    print(f"Split the word '{all_words[i]}' into '{content_word}' and '{all_words[i][len(content_word):]}'")
+                    logger.debug(f"    Word '{all_words[i]}' in the word list starts with the word '{content_word}' in the content")
+                    logger.debug(f"    Split the word '{all_words[i]}' into '{content_word}' and '{all_words[i][len(content_word):]}'")
                     all_words.insert(i+1, all_words[i][len(content_word):])
                     all_words[i] = content_word
                     words_start_times.insert(i+1, words_start_times[i])
                     words_end_times.insert(i+1, words_end_times[i])
                 # spacy will tokenize content. So, we can't distinguish between digit. digit with digit.digit, here is a bypass way
                 elif content_word.startswith(all_words[i]):
-                    print(f"Word '{content_word}' in the content starts with the word '{all_words[i]}' in the word list")
-                    print(f"Merging the word '{all_words[i]}' and '{all_words[i+1]}' into {all_words[i]+all_words[i+1]}")
+                    logger.debug(f"    Word '{content_word}' in the content starts with the word '{all_words[i]}' in the word list")
+                    logger.debug(f"    Merging the word '{all_words[i]}' and '{all_words[i+1]}' into {all_words[i]+all_words[i+1]}")
                     all_words[i] = all_words[i] + all_words[i+1]
                     all_words.pop(i+1)
                     words_end_times[i] = words_end_times[i+1]
                     words_start_times.pop(i+1)
                     words_end_times.pop(i+1)
                 else:
-                    print(f"Can't find the word '{content_word}' in the word list")
+                    logger.error(f"Can't find the word '{content_word}' in the word list")
                     exit(1)
             i += 1
     
-    print("All words are matched with the contents")
+    logger.info("All words are matched with the contents")
     
     i = 0
     j = 0
     while i < len(old_all_words) and j < len(all_words):
-        # print(f"{i}: {old_all_words[i]} : {old_word_start_times[i]} - {old_word_end_times[i]}")
-        # print(f"{j}: {all_words[j]} : {words_start_times[j]} - {words_end_times[j]}")
+        logger.debug(f"{i}: {old_all_words[i]} : {old_word_start_times[i]} - {old_word_end_times[i]}")
+        logger.debug(f"{j}: {all_words[j]} : {words_start_times[j]} - {words_end_times[j]}")
         if old_all_words[i] == all_words[j]:
             i += 1
             j += 1
         else:
             if old_all_words[i].startswith(all_words[j]):
-                # print(f"{old_all_words[i]} starts with {all_words[j]}")
+                logger.debug(f"{old_all_words[i]} starts with {all_words[j]}")
                 old_all_words[i] = old_all_words[i][len(all_words[j]):]
                 j += 1
             elif all_words[j].startswith(old_all_words[i]):
-                # print(f"{all_words[j]} starts with {old_all_words[i]}")
+                logger.debug(f"{all_words[j]} starts with {old_all_words[i]}")
                 all_words[j] = all_words[j][len(old_all_words[i]):]
                 i += 1
             else:
-                print(f"Mismatch: {old_all_words[i]} and {all_words[j]}")
+                logger.error(f"Mismatch: {old_all_words[i]} and {all_words[j]}")
                 exit(1)
 
     # Get the start and end times of the contents
@@ -127,8 +138,8 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
         if words_start_times[i]:
             contents_start_times.append(words_start_times[i])
         else:
-            print(f"In the content: {content}")
-            print(f"Start time not found for word {i+1}: {all_words[i]}")
+            logger.debug(f"In the content: {content}")
+            logger.debug(f"    Start time not found for word {i+1}: {all_words[i]}")
             # Find the nearest start time
             j = i
             while j > 0 and not words_start_times[j]:
@@ -137,32 +148,32 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
                 contents_start_times.append(0)
             else:
                 contents_start_times.append(words_end_times[j])
-            print(f"Nearest start time: word_end_times[{j}], word: {all_words[j]}")
+            logger.debug(f"    Nearest start time: word_end_times[{j}], word: {all_words[j]}")
         i += len(content_words)
         if words_end_times[i-1]:
             contents_end_times.append(words_end_times[i-1])
         else:
-            print(f"In the content: {content}")
-            print(f"End time not found for word {i}: {all_words[i-1]}")
+            logger.debug(f"In the content: {content}")
+            logger.debug(f"    End time not found for word {i}: {all_words[i-1]}")
             # Find the nearest end time
             j = i
             while j < len(all_words) and not words_end_times[j]:
                 j += 1
             if j == len(all_words):
-                print(f"Searching hit the end of the word list, please check the last word")
+                logger.debug(f"    Searching hit the end of the word list, please check the last word")
                 contents_end_times.append(contents_start_times[-1])
             else:
                 contents_end_times.append(words_start_times[j])
-            print(f"Nearest end time: word_start_times[{j}], word: {all_words[j]}")
+            logger.debug(f"    Nearest end time: word_start_times[{j}], word: {all_words[j]}")
     
     i = 0
     for i in range(len(en_contents)-1):
         if contents_start_times[i+1] < contents_end_times[i]:
-            print(f"Content {i+1} starts before content {i} ends")
-            print(f"Content {i}: {en_contents[i]}")
-            print(f"Content {i} ends at {contents_end_times[i]}")
-            print(f"Content {i+1}: {en_contents[i+1]}")
-            print(f"Content {i+1} starts at {contents_start_times[i+1]}")
+            logger.debug(f"Content {i+1} starts before content {i} ends")
+            logger.debug(f"    Content {i}: {en_contents[i]}")
+            logger.debug(f"    Content {i} ends at {contents_end_times[i]}")
+            logger.debug(f"    Content {i+1}: {en_contents[i+1]}")
+            logger.debug(f"    Content {i+1} starts at {contents_start_times[i+1]}")
             # exit(1)
             contents_start_times[i+1] = contents_end_times[i]
     # Create en subtitles
@@ -180,7 +191,7 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     for i, content in enumerate(en_contents):
         ch_en_subtitles.append(srt.Subtitle(index=i+1, content=ch_contents[i] + '\n' + content, start=timedelta(seconds=contents_start_times[i]), end=timedelta(seconds=contents_end_times[i])))
 
-    print("Subtitles are created")
+    logger.info("Subtitles are created")
 
     # Write the subtitles to the output directory
     if not os.path.exists(output_dir):
@@ -195,7 +206,7 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
     with open(os.path.join(output_dir, "ch_en.srt"), 'w', encoding='utf-8') as f:
         f.write(srt.compose(ch_en_subtitles))
 
-    print("Subtitles are written to the output directory")
+    logger.info(f"Subtitles are saved to {output_dir}")
 
 
 if __name__ == "__main__":
@@ -206,8 +217,6 @@ if __name__ == "__main__":
     parser.add_argument('--ch_file_path', help='Path to the Chinese content file', required=True)
     parser.add_argument('--output_dir', help='Path to the output directory', required=True)
     args = parser.parse_args()
-
-    
 
     # Call the aligner function
     aligner(args.json_file_path, args.en_file_path, args.ch_file_path, args.output_dir)

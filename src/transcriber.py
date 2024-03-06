@@ -1,17 +1,20 @@
 import argparse
 import os
+import subator_constants
 
 def transcriber(autdio_path, output_dir, model_path):
     # Create the output directory if it does not exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    model = "large-v3"
+    model = subator_constants.TRANSCRIBE_MODEL
     print_progress = True
-    language = "en"
-    align_model = "WAV2VEC2_ASR_LARGE_LV60K_960H"
+    language = subator_constants.TRANSCRIBE_LANGUAGE
+    align_model = subator_constants.TRANSCRIBE_ALIGN_MODEL
     # Execute this command line to transcribe the audio file
-    os.system(f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir} --model_dir {model_path}")
+    command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir} --model_dir {model_path}"
+    print(command)
+    os.system(command)
 
 
 if __name__ == "__main__":
