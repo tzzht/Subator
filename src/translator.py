@@ -8,6 +8,9 @@ from http import HTTPStatus
 import dashscope
 import subator_constants
 import logging
+import time
+import re
+from deepmultilingualpunctuation import PunctuationModel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -17,39 +20,6 @@ file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
-
-
-
-def merge_short_lines(sentences):
-    MAX_LINE_LENGTH = subator_constants.MAX_EN_FRAGMENT_LENGTH
-    i = 0
-    while i+1 < len(sentences):
-        if len(sentences[i]) + len(sentences[i+1]) < int(MAX_LINE_LENGTH*0.8):
-            logger.info(f"Merge sentence {sentences[i]} with {sentences[i+1]}")
-            sentences[i] = sentences[i] + ' '+ sentences[i+1]
-            del sentences[i+1]
-        else:
-            i += 1
-    
-    i = 0
-    while i+1 < len(sentences):
-        if (len(sentences[i]) < int(MAX_LINE_LENGTH*0.25) or len(sentences[i+1]) < int(MAX_LINE_LENGTH*0.25)) and len(sentences[i]) + len(sentences[i+1]) < MAX_LINE_LENGTH:
-            logger.info(f"Merge sentence {sentences[i]} with {sentences[i+1]}")
-            sentences[i] = sentences[i] + ' '+ sentences[i+1]
-            del sentences[i+1]
-        else:
-            i += 1
-    
-    i = 0
-    while i+1 < len(sentences):
-        if (len(sentences[i]) < int(MAX_LINE_LENGTH*0.1) or len(sentences[i+1]) < int(MAX_LINE_LENGTH*0.1)):
-            logger.info(f"Merge sentence {sentences[i]} with {sentences[i+1]}")
-            sentences[i] = sentences[i] + ' '+ sentences[i+1]
-            del sentences[i+1]
-        else:
-            i += 1
-    logger.info('')
-    return sentences
 
 def is_sentence_start(sent):
     start_set = ['so', 'and', 'but', 'or', 'if', 'when', 'because', 'then', 'i']
@@ -67,60 +37,14 @@ def is_sentence_end(sent):
                 return True
     return False
     
-def split_long_lines(sentences):
-    MAX_LINE_LENGTH = subator_constants.MAX_EN_FRAGMENT_LENGTH*2
-    # Load the spacy model
-    en_nlp = spacy.load(subator_constants.SPACY_EN_MODEL)
-    doc = en_nlp(sentences)
-    sentences_fragmented = []
-    for i, sent in enumerate(doc.sents):
-        if len(sent.text) > MAX_LINE_LENGTH:
-            logger.info(f"Line {i+1} is too long: {len(sent.text)}")
-            logger.info(f"    {sent.text}")
-            for token in sent:
-                logger.debug(f"    {token.text} - {token.dep_}")
-            frag_start = 0
-            frags = []
-            for i, token in enumerate(sent):
-                if is_sentence_end(sent[i:]) and len(sent[frag_start:i+1].text) > MAX_LINE_LENGTH*0.25:
-                    span = sent[frag_start:i+1]
-                    frags.append(span.text)
-                    frag_start = i+1
-                elif is_sentence_start(sent[i:]) and len(sent[frag_start:i].text) > MAX_LINE_LENGTH*0.25:
-                    span = sent[frag_start:i]
-                    frags.append(span.text)
-                    frag_start = i
-            span = sent[frag_start:]
-            frags.append(span.text)
-            for frag in frags:
-                logger.info(f"    Split sentence: {frag}")
-            logger.info(f"    Longest fragment: {max([len(i) for i in frags])}")
-            logger.info('')
-            sentences_fragmented.extend(frags)
-        else:
-            sentences_fragmented.append(sent.text)
-
-    # strip the sentences
-    sentences_fragmented = [i.strip() for i in sentences_fragmented]
-    
-    return sentences_fragmented
-
 def get_sentences(sentences_file_path):
     # Read the file
     if not os.path.exists(sentences_file_path):
         logger.error(f"File '{sentences_file_path}' not found.")
         exit(1)
     with open(sentences_file_path, 'r', encoding='utf-8') as f:
-        sentences = f.read()
-    sentences = ' '.join(sentences.split())
-
-    # Split the lone sentences
-    sentences_fragmented = split_long_lines(sentences)
-    # Merge short sentences
-    sentences_fragmented = merge_short_lines(sentences_fragmented)
-
-    return sentences_fragmented
-
+        sentences = f.readlines()
+    return sentences
 
 def call_qwen_api(messages, api_key):
     logger.debug("        Calling Qwen API")
@@ -147,6 +71,9 @@ def call_qwen_api(messages, api_key):
             content_translated = '调用Qwen API出错。'
             token_used = response.usage.total_tokens
             response_valid = False
+            if response.message == 'Requests rate limit exceeded, please try again later.':
+                # wait for 5 seconds and retry
+                time.sleep(5)
     except Exception as e:
         logger.error(f'        Error calling Qwen API: {e}')
         content_translated = '调用Qwen API出错。'
@@ -199,7 +126,7 @@ def is_good_response(sentence_translated, sentence):
     if '\n' in sentence_translated:
         logger.debug(f"    Response contains multiple lines.")
         return False
-    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated) and '：' in sentence_translated):
+    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated) and '：' in sentence_translated):
         logger.debug(f"    Response contains unexpected content.")
         return False
     if ratio > RATIO_LIMIT:
@@ -286,16 +213,10 @@ def translator(sentences_file_path, output_dir, api_key, user_prompt, llm):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Write the sentence to a file
-    output_file = os.path.join(output_dir, "en.txt")
-    with open(output_file, 'w', encoding='utf-8') as f:
-        for sentence in sentences:
-            f.write(sentence + '\n')
-
     sentences_translated, tot_tokens = translate_all(sentences, llm, api_key, user_prompt)
 
     # Write the translated sentences to a file
-    output_file = os.path.join(output_dir, "ch.txt")
+    output_file = os.path.join(output_dir, "sentences_translated.txt")
     with open(output_file, 'w', encoding='utf-8') as f:
         for sentence in sentences_translated:
             f.write(sentence + '\n')

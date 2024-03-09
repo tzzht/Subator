@@ -14,183 +14,85 @@ file_handler = logging.FileHandler(f"{__name__}.log", mode="w", encoding="utf-8"
 logger.addHandler(file_handler)
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
-
-
-def load_json(file_path):
-    # Load the JSON file
-    with open(file_path, "r", encoding="utf-8") as file:
-        audio_data = json.load(file)
-
-    word_dict = audio_data["word_segments"]
-
-    all_words = []
-    all_start_times = []
-    all_end_times = []
-    for i, word in enumerate(word_dict):
-        # Handle the bug of WhisperX
-        if word["word"] == 'JR.:':
-            word["word"] = 'JR.'
-        all_words.append(word["word"])
-        if 'start' in word:
-            all_start_times.append(word["start"])
-        else:
-            logger.debug(f"Start time not found for word {i+1}: {word}")
-            if i == 0:
-                all_start_times.append(0)
-            else:
-                all_start_times.append(None)
-        if 'end' in word:
-            all_end_times.append(word["end"])
-        else:
-            logger.debug(f"End time not found for word {i+1}: {word}")
-            all_end_times.append(None)
     
-    if len(all_words) != len(all_start_times) or len(all_words) != len(all_end_times):
-        logger.error(f"Length of words ({len(all_words)}), start times ({len(all_start_times)}), and end times ({len(all_end_times)}) do not match.")
+
+def eliminate_end_puncuation(text):
+    if len(text) > 0 and text[-1] in ',.':
+        return text[:-1]
+    return text
+
+def check_clean_words(words1, words2):
+    logger.info('Checking clean words...')
+    if len(words1) != len(words2):
+        logger.error(f'Cheking clean words failed: Lengths are not equal: {len(words1)} != {len(words2)}')
+        # exit(1)
+    for i in range(len(words1)):
+        if eliminate_end_puncuation(words1[i]) != eliminate_end_puncuation(words2[i]):
+            logger.error(f'Cheking clean words failed: Words are not equal: {words1[i]} != {words2[i]}')
+            exit(1)
+    logger.info('Cheking clean words passed: All words are equal')
+
+def aligner(fragments_file_path, timestamps_file_path, output_dir):
+    # Load the json file
+    if not os.path.exists(fragments_file_path):
+        logger.error(f"File '{fragments_file_path}' not found.")
         exit(1)
-    
-    # for i in range(len(all_words)):
-    #     logger.debug(f'{all_words[i]}: {all_start_times[i]} - {all_end_times[i]}')
-    return all_words, all_start_times, all_end_times
-
-
-def read_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return [line.strip() for line in f.readlines()]
-    
-   
-def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
-    # Read the English and Chinese content
-    en_contents = read_file(en_file_path)
-    ch_contents = read_file(ch_file_path)
-    
-    if len(en_contents) != len(ch_contents):
-        logger.error(f"Length of English contents ({len(en_contents)}) and Chinese contents ({len(ch_contents)}) do not match.")
+    if not os.path.exists(timestamps_file_path):
+        logger.error(f"File '{timestamps_file_path}' not found.")
         exit(1)
+    with open(fragments_file_path, 'r', encoding='utf-8') as f:
+        fragments = json.load(f)
+    with open(timestamps_file_path, 'r', encoding='utf-8') as f:
+        timestamps = json.load(f)
 
-    # Load the JSON file
-    all_words, words_start_times, words_end_times = load_json(json_file_path)
+    words1 = []
+    words2 = []
+    for fragment in fragments:
+        for sentence in fragment['en']:
+            words1.extend(sentence.split())
     
-    old_all_words = all_words.copy()
-    old_word_start_times = words_start_times.copy()
-    old_word_end_times = words_end_times.copy()
+    for timestamp in timestamps:
+        words2.append(timestamp['word'])
+    check_clean_words(words1, words2)
+  
+    fragments_with_timestamps = []
+    i = 0
+    for fragment in fragments:
+        fragment_with_timestamps = {}
+        fragment_with_timestamps['en'] = fragment['en']
+        fragment_with_timestamps['ch'] = fragment['ch']
+        fragment_with_timestamps['en_start'] = []
+        fragment_with_timestamps['en_end'] = []
+        fragment_with_timestamps['ch_start'] = ''
+        fragment_with_timestamps['ch_end'] = ''
 
-    # Check if contents are matched with the words
-    i = 0
-    for content in en_contents:
-        content_words = content.split(' ')
-        for content_word in content_words:
-            logger.debug(f'Checking the word: {content_word} with the word: {all_words[i]}')
-            if content_word != all_words[i]:
-                logger.debug(f'    In the content: {content}, the word: {content_word} does not match with the word: {all_words[i]}')
-                logger.debug(f'    content_word: {content_word}, all_words[i]: {all_words[i]}, all_words[i+1]: {all_words[i+1]}')
-                # spacy will tokenize content. Words like aa-aa may be multiple tokens. Here is a bypass way
-                if all_words[i].startswith(content_word):
-                    logger.debug(f"    Word '{all_words[i]}' in the word list starts with the word '{content_word}' in the content")
-                    logger.debug(f"    Split the word '{all_words[i]}' into '{content_word}' and '{all_words[i][len(content_word):]}'")
-                    all_words.insert(i+1, all_words[i][len(content_word):])
-                    all_words[i] = content_word
-                    words_start_times.insert(i+1, words_start_times[i])
-                    words_end_times.insert(i+1, words_end_times[i])
-                # spacy will tokenize content. So, we can't distinguish between digit. digit with digit.digit, here is a bypass way
-                elif content_word.startswith(all_words[i]):
-                    logger.debug(f"    Word '{content_word}' in the content starts with the word '{all_words[i]}' in the word list")
-                    logger.debug(f"    Merging the word '{all_words[i]}' and '{all_words[i+1]}' into {all_words[i]+all_words[i+1]}")
-                    all_words[i] = all_words[i] + all_words[i+1]
-                    all_words.pop(i+1)
-                    words_end_times[i] = words_end_times[i+1]
-                    words_start_times.pop(i+1)
-                    words_end_times.pop(i+1)
-                else:
-                    logger.error(f"Can't find the word '{content_word}' in the word list")
-                    exit(1)
-            i += 1
+        for sentence in fragment['en']:
+            clean_words = [eliminate_end_puncuation(word) for word in sentence.split()]
+            en_start = timestamps[i]['start']
+            en_end = timestamps[i+len(clean_words)-1]['end']
+            fragment_with_timestamps['en_start'].append(en_start)
+            fragment_with_timestamps['en_end'].append(en_end)
+            i += len(clean_words)
+        assert len(fragment_with_timestamps['en_start']) == len(fragment_with_timestamps['en_end'])
+        fragment_with_timestamps['ch_start'] = fragment_with_timestamps['en_start'][0]
+        fragment_with_timestamps['ch_end'] = fragment_with_timestamps['en_end'][-1]
+        fragments_with_timestamps.append(fragment_with_timestamps)
     
-    logger.info("All words are matched with the contents")
-    
-    i = 0
-    j = 0
-    while i < len(old_all_words) and j < len(all_words):
-        logger.debug(f"{i}: {old_all_words[i]} : {old_word_start_times[i]} - {old_word_end_times[i]}")
-        logger.debug(f"{j}: {all_words[j]} : {words_start_times[j]} - {words_end_times[j]}")
-        if old_all_words[i] == all_words[j]:
-            i += 1
-            j += 1
-        else:
-            if old_all_words[i].startswith(all_words[j]):
-                logger.debug(f"{old_all_words[i]} starts with {all_words[j]}")
-                old_all_words[i] = old_all_words[i][len(all_words[j]):]
-                j += 1
-            elif all_words[j].startswith(old_all_words[i]):
-                logger.debug(f"{all_words[j]} starts with {old_all_words[i]}")
-                all_words[j] = all_words[j][len(old_all_words[i]):]
-                i += 1
-            else:
-                logger.error(f"Mismatch: {old_all_words[i]} and {all_words[j]}")
-                exit(1)
+    assert i == len(timestamps)
 
-    # Get the start and end times of the contents
-    contents_start_times = []
-    contents_end_times = []
-    i = 0
-    for content in en_contents:
-        content_words = content.split(' ')
-        if words_start_times[i]:
-            contents_start_times.append(words_start_times[i])
-        else:
-            logger.debug(f"In the content: {content}")
-            logger.debug(f"    Start time not found for word {i+1}: {all_words[i]}")
-            # Find the nearest start time
-            j = i
-            while j > 0 and not words_start_times[j]:
-                j -= 1
-            if j == 0:
-                contents_start_times.append(0)
-            else:
-                contents_start_times.append(words_end_times[j])
-            logger.debug(f"    Nearest start time: word_end_times[{j}], word: {all_words[j]}")
-        i += len(content_words)
-        if words_end_times[i-1]:
-            contents_end_times.append(words_end_times[i-1])
-        else:
-            logger.debug(f"In the content: {content}")
-            logger.debug(f"    End time not found for word {i}: {all_words[i-1]}")
-            # Find the nearest end time
-            j = i
-            while j < len(all_words) and not words_end_times[j]:
-                j += 1
-            if j == len(all_words):
-                logger.debug(f"    Searching hit the end of the word list, please check the last word")
-                contents_end_times.append(contents_start_times[-1])
-            else:
-                contents_end_times.append(words_start_times[j])
-            logger.debug(f"    Nearest end time: word_start_times[{j}], word: {all_words[j]}")
-    
-    i = 0
-    for i in range(len(en_contents)-1):
-        if contents_start_times[i+1] < contents_end_times[i]:
-            logger.debug(f"Content {i+1} starts before content {i} ends")
-            logger.debug(f"    Content {i}: {en_contents[i]}")
-            logger.debug(f"    Content {i} ends at {contents_end_times[i]}")
-            logger.debug(f"    Content {i+1}: {en_contents[i+1]}")
-            logger.debug(f"    Content {i+1} starts at {contents_start_times[i+1]}")
-            # exit(1)
-            contents_start_times[i+1] = contents_end_times[i]
     # Create en subtitles
     en_subtitles = []
-    for i, content in enumerate(en_contents):
-        en_subtitles.append(srt.Subtitle(index=i+1, content=content, start=timedelta(seconds=contents_start_times[i]), end=timedelta(seconds=contents_end_times[i])))
+    subtitle_index = 1
+    for fragment in fragments_with_timestamps:
+        for j, sentence in enumerate(fragment['en']):
+            en_subtitles.append(srt.Subtitle(index=subtitle_index+j, content=sentence, start=timedelta(seconds=fragment['en_start'][j]), end=timedelta(seconds=fragment['en_end'][j])))
+        subtitle_index += len(fragment['en'])
 
     # Create ch subtitles
     ch_subtitles = []
-    for i, content in enumerate(ch_contents):
-        ch_subtitles.append(srt.Subtitle(index=i+1, content=content, start=timedelta(seconds=contents_start_times[i]), end=timedelta(seconds=contents_end_times[i])))
-
-    # Create ch_en subtitles
-    ch_en_subtitles = []
-    for i, content in enumerate(en_contents):
-        ch_en_subtitles.append(srt.Subtitle(index=i+1, content=ch_contents[i] + '\n' + content, start=timedelta(seconds=contents_start_times[i]), end=timedelta(seconds=contents_end_times[i])))
-
+    for i, fragment in enumerate(fragments_with_timestamps):
+        ch_subtitles.append(srt.Subtitle(index=i+1, content=fragment['ch'], start=timedelta(seconds=fragment['ch_start']), end=timedelta(seconds=fragment['ch_end'])))
+   
     logger.info("Subtitles are created")
 
     # Write the subtitles to the output directory
@@ -202,9 +104,6 @@ def aligner(json_file_path, en_file_path, ch_file_path, output_dir):
 
     with open(os.path.join(output_dir, "ch.srt"), 'w', encoding='utf-8') as f:
         f.write(srt.compose(ch_subtitles))
-
-    with open(os.path.join(output_dir, "ch_en.srt"), 'w', encoding='utf-8') as f:
-        f.write(srt.compose(ch_en_subtitles))
 
     logger.info(f"Subtitles are saved to {output_dir}")
 

@@ -68,7 +68,7 @@ def downloader(url, save_dir):
     video_path = download_stream(resouces_dir, video_stream)
     audio_path = download_stream(resouces_dir, audio_stream)
 
-    print()
+    print("Download completed")
     return video_path, audio_path, resouces_dir
 
     
