@@ -230,7 +230,11 @@ def transcriber(autdio_path, output_dir):
     language = subator_constants.TRANSCRIBE_LANGUAGE
     align_model = subator_constants.TRANSCRIBE_ALIGN_MODEL
     # Execute this command line to transcribe the audio file
-    command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir} --model_dir {model_path}"
+    command = ''
+    if model_path == '':
+        command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir}"
+    else:
+        command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir} --model_dir {model_path}"
     logger.info(command)
     os.system(command)
 
