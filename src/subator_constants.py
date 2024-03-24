@@ -26,4 +26,13 @@ PUNCTUATION_MODEL_PATH = ""
 SPACY_EN_MODEL = "en_core_web_trf"
 SPACY_CH_MODEL = "zh_core_web_trf"
 
-    
+# save_dir
+SAVE_DIR = "E:\\TranslateVideo"
+
+# LLM
+LLM = "gpt"
+
+# API_KEY
+QWEN_API_KEY = ""
+GLM_API_KEY = ""
+GPT_API_KEY = ""

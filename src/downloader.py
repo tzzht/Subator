@@ -1,4 +1,4 @@
-from pytubefix import YouTube
+from pytube import YouTube
 import argparse
 import os
 import sys
@@ -51,16 +51,18 @@ def downloader(url, save_dir):
 
     # if the video or audio streams are not found, print the error message
     if len(video_streams) == 0:
-        print("Video stream is not found, please input the itag of the video stream")
-        itag = int(input("Please input the itag of the video stream: "))
-        video_stream = streams.get_by_itag(itag)
+        # print("Video stream is not found, please input the itag of the video stream")
+        # itag = int(input("Please input the itag of the video stream: "))
+        # video_stream = streams.get_by_itag(itag)
+        # Find the video stream with the highest resolution
+        video_stream = streams.order_by("resolution").last()
     else:
         video_stream = video_streams[0]
 
     if len(audio_streams) == 0:
-        print("Audio stream is not found, please input the itag of the audio stream")
-        itag = int(input("Please input the itag of the audio stream: "))
-        audio_stream = streams.get_by_itag(itag)
+        # print("Audio stream is not found, please input the itag of the audio stream")
+        # itag = int(input("Please input the itag of the audio stream: "))
+        audio_stream = streams.order_by("abr").last()
     else:
         audio_stream = audio_streams[0]
 

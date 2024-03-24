@@ -10,8 +10,8 @@
 # Prerequisites
 - (optional) miniconda
     - https://docs.anaconda.com/free/miniconda/miniconda-install/
-- pytubefix
-    - `pip install pytubefix`
+- pytube
+    - `pip install pytube`
 - WhisperX
     - https://github.com/m-bain/whisperX
 - fullstop-deep-punctuation-prediction
@@ -46,6 +46,5 @@
 - The aligner will read `fragments.json` and `timestamps.json` to generate the final subtitle file, which will be saved in the `save_dir\video_author\video_title` folder.
 
 # Some Points to Note
-- Recommend using `qwen-max`. Because its translation performance is better than `glm-4`, and `glm-4` often errors due to sensitive information censorship.
 - WhisperX does not provide timestamps for numbers and special characters. If the video contains a lot of numbers, Subator's performance will be poor.
 - ***Subator can only help reduce the time it takes to create subtitles. The generated subtitles need to be proofread using tools like PR or SubtitleEdit before use.***

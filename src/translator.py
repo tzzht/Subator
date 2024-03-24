@@ -10,16 +10,19 @@ import subator_constants
 import logging
 import time
 import re
+from openai import OpenAI
 from deepmultilingualpunctuation import PunctuationModel
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler(f"{__name__}.log", mode="w", encoding="utf-8")
 formatter = logging.Formatter("%(asctime)s - %(message)s")
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
+
+gpt_client = None
 
 def is_sentence_start(sent):
     start_set = ['so', 'and', 'but', 'or', 'if', 'when', 'because', 'then', 'i']
@@ -46,6 +49,26 @@ def get_sentences(sentences_file_path):
         sentences = f.readlines()
     return sentences
 
+def call_gpt_api(messages, api_key):
+    logger.debug("        Calling GPT API")
+    content_translated = ''
+    token_used = 0
+    response_valid = True
+    try:
+        response = gpt_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+        )
+        content_translated = response.choices[0].message.content
+        token_used = response.usage.total_tokens
+    except Exception as e:
+        logger.error(f'        Error calling GPT API: {e}')
+        content_translated = '调用GPT API出错。'
+        response_valid = False
+
+    logger.debug(f"        Response: {content_translated}")
+    return content_translated, token_used, response_valid
+
 def call_qwen_api(messages, api_key):
     logger.debug("        Calling Qwen API")
     content_translated = ''
@@ -54,7 +77,7 @@ def call_qwen_api(messages, api_key):
     try:
         dashscope.api_key = api_key
         response = dashscope.Generation.call(
-            model='qwen-max',
+            model='qwen-plus',
             messages=messages,
             # set the random seed, optional, default to 1234 if not set
             seed=random.randint(1, 10000),
@@ -69,9 +92,8 @@ def call_qwen_api(messages, api_key):
                 response.code, response.message
             ))
             content_translated = '调用Qwen API出错。'
-            token_used = response.usage.total_tokens
             response_valid = False
-            if response.message == 'Requests rate limit exceeded, please try again later.':
+            if response.status_code == 429:
                 # wait for 5 seconds and retry
                 time.sleep(5)
     except Exception as e:
@@ -126,7 +148,7 @@ def is_good_response(sentence_translated, sentence):
     if '\n' in sentence_translated:
         logger.debug(f"    Response contains multiple lines.")
         return False
-    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated) and '：' in sentence_translated):
+    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated or '含义' in sentence_translated) and '：' in sentence_translated):
         logger.debug(f"    Response contains unexpected content.")
         return False
     if ratio > RATIO_LIMIT:
@@ -136,7 +158,9 @@ def is_good_response(sentence_translated, sentence):
 
 def call_llm_api(llm, messages, api_key):
     logger.debug(f"    Calling {llm} API with messages: {messages}")
-    if llm == "qwen":
+    if llm == "gpt":
+        return call_gpt_api(messages, api_key)
+    elif llm == "qwen":
         return call_qwen_api(messages, api_key)
     elif llm == "glm":
         return call_glm_api(messages, api_key)
@@ -148,7 +172,7 @@ def translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, w
     RETRY_LIMIT = subator_constants.TRANSLATE_RETRY_LIMIT
     token_used = 0
 
-    system_content = f"你是一名翻译专家。请使用地道流畅简洁的语言表达，尽量使用简单句，可以意译，避免生硬翻译。人名和地名等专有名词不要翻译。{user_prompt}。"
+    system_content = f"你是一名翻译专家，双语字幕制作专家，{user_prompt}。请使用地道流畅简洁的语言表达，尽量使用简单句。"
     user_content = f"这是上文：{window_before_str}。这是下文：{window_after_str}。请将下面这个英文句子片段翻译为中文：{sentence}。除了该片段的翻译结果不要输出任何语句。"
     message = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
     logger.info(f"Sentence: {sentence}")
@@ -209,6 +233,10 @@ def translate_all(sentences, llm, api_key, user_prompt):
         
 def translator(sentences_file_path, output_dir, api_key, user_prompt, llm):
     sentences = get_sentences(sentences_file_path)
+
+    # if llm == 'gpt':
+    #     global gpt_client
+    #     gpt_client = OpenAI(base_url="https://api.chatgptid.net/v1", api_key=api_key)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
