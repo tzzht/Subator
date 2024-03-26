@@ -7,7 +7,7 @@ import sys
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 file_handler = logging.FileHandler(f"{__name__}.log", mode="w", encoding="utf-8")
 # formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 # file_handler.setFormatter(formatter)
@@ -27,6 +27,7 @@ def check_clean_words(words1, words2):
         logger.error(f'Cheking clean words failed: Lengths are not equal: {len(words1)} != {len(words2)}')
         # exit(1)
     for i in range(len(words1)):
+        logger.debug(f'Checking clean words: {words1[i]} == {words2[i]}')
         if eliminate_end_puncuation(words1[i]) != eliminate_end_puncuation(words2[i]):
             logger.error(f'Cheking clean words failed: Words are not equal: {words1[i]} != {words2[i]}')
             exit(1)

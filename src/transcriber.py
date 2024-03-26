@@ -5,6 +5,7 @@ import re
 import sys
 import json
 from deepmultilingualpunctuation import PunctuationModel
+import whisper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -219,40 +220,29 @@ def check_timestamps(word_segments, time_stamps):
             exit(1)
     logger.info('Cheking timestamps passed: All times are equal')
 
-def transcriber(autdio_path, output_dir):
+def transcriber(audio_path, output_dir):
     # Create the output directory if it does not exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     model = subator_constants.TRANSCRIBE_MODEL
-    model_path = subator_constants.TRANSCRIBE_MODEL_PATH
-    print_progress = True
-    language = subator_constants.TRANSCRIBE_LANGUAGE
-    align_model = subator_constants.TRANSCRIBE_ALIGN_MODEL
-    # Execute this command line to transcribe the audio file
-    command = ''
-    if model_path == '':
-        command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir}"
-    else:
-        command = f"whisperx {autdio_path} --model {model} --print_progress {print_progress} --language {language} --align_model {align_model} --output_dir {output_dir} --model_dir {model_path}"
-    logger.info(command)
-    os.system(command)
+    model = whisper.load_model("medium.en")
+    result = model.transcribe(audio=audio_path, verbose=True, word_timestamps=True)
 
-    if not os.path.exists(os.path.join(output_dir, "audio.txt")) and not os.path.exists(os.path.join(output_dir, "audio.json")):
-        logger.error("Transcription failed.")
-        exit(1)
+    with open(os.path.join(output_dir, "transcription.json"), 'w') as f:
+        f.write(json.dumps(result, ensure_ascii=False, indent=4))
+    logger.info(f"Transcription is saved to {os.path.join(output_dir, 'transcription.json')}")
     
-    text_path = os.path.join(output_dir, "audio.txt")
-    with open(text_path, 'r') as f:
-        text = f.read()
+    text = ''
+    word_segments = []
+
+    for segment in result['segments']:
+        for word_segment in segment['words']:
+            word_segments.append({'word': word_segment['word'], 'start': word_segment['start'], 'end': word_segment['end']})
+            text += word_segment['word'] + ' '
+    
     sentences = process_transcription(text)
-    
-
-    json_path = os.path.join(output_dir, "audio.json")
-    with open(json_path, 'r') as f:
-        audio_data = json.load(f)
-    
-    timestamps = process_timestamps(audio_data['word_segments'])
+    timestamps = process_timestamps(word_segments)
 
     words1 = []
     for sentence in sentences:
@@ -260,6 +250,8 @@ def transcriber(autdio_path, output_dir):
     words2 = []
     for timestamp in timestamps:
         words2.append(timestamp['word'])
+    for word1, word2 in zip(words1, words2):
+        logger.debug(f'{word1} == {word2}')
     check_clean_words(words1, words2)
     
     sencences_path = os.path.join(output_dir, "sentences.txt")

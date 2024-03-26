@@ -37,7 +37,7 @@ print(f"Transcribe the audio from {audio_path}")
 transcriber.transcriber(audio_path, resouces_dir)
 print()
 print("Please check if the transcription is correct.")
-# input("Press Enter to continue...")
+input("Press Enter to continue...")
 
 # Translate the video
 sentences_file_path = os.path.join(resouces_dir, 'sentences.txt')
@@ -45,9 +45,9 @@ print(f"Translate the sentences from {sentences_file_path}")
 
 # prompt = '你是NVIDIA CEO黄仁勋'
 # prompt = '你是一名计算机架构教授'
-prompt = '你是一名科技数码博主'
+# prompt = '你是一名科技数码博主'
 # prompt = '你是一名雅思老师'
-# prompt = '你是一名形式化教授，熟知SAT和SMT Solvers'
+prompt = '你是一名形式化教授，熟知SAT和SMT Solvers'
 # prompt = '你是一名AI研究员'
 # prompt = '你是新闻播报员'
 translator.translator(sentences_file_path, resouces_dir, api_key, prompt, llm)

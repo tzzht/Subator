@@ -1,4 +1,4 @@
-from pytube import YouTube
+from pytubefix import YouTube
 import argparse
 import os
 import sys
@@ -66,6 +66,8 @@ def downloader(url, save_dir):
     else:
         audio_stream = audio_streams[0]
 
+    print(f"Dowloading the video stream: {video_stream}")
+    print(f"Dowloading the audio stream: {audio_stream}")
     # Download the video and audio streams
     video_path = download_stream(resouces_dir, video_stream)
     audio_path = download_stream(resouces_dir, audio_stream)
