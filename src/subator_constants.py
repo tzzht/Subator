@@ -10,6 +10,8 @@ VIDEO_PROGRESSIVE = False
 AUDIO_MIME_TYPE = "audio/webm"
 AUDIO_ABR = "160kbps"
 
+SUPER_RESOLUTION_EXE = ".\\realesrgan-ncnn-vulkan-20220424-windows\\realesrgan-ncnn-vulkan.exe"
+
 # transcriber
 TRANSCRIBE_MODEL = "medium.en"
 
@@ -24,12 +26,9 @@ SPACY_EN_MODEL = "en_core_web_trf"
 SPACY_CH_MODEL = "zh_core_web_trf"
 
 # save_dir
-SAVE_DIR = "E:\\TranslateVideo"
+SAVE_DIR = "D:\\Documents\\TranslateVideo"
 
 # LLM
 LLM = "gpt"
 
 # API_KEY
-QWEN_API_KEY = ""
-GLM_API_KEY = ""
-GPT_API_KEY = ""

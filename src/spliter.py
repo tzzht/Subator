@@ -58,7 +58,7 @@ def sep(span1, span2):
     return ' '
 
 def eliminate_punctuation(fragment):
-    punctuation_pattern = r'([。，！？；：“”《》、（）])'
+    punctuation_pattern = r'([。，！？；：“”《》、（）,.])'
     fragment = re.sub(punctuation_pattern, ' ', fragment)
     fragment = fragment.strip()
     return fragment

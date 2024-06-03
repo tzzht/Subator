@@ -29,6 +29,10 @@
     - `pip install -U srt`
 - webm
     - https://www.fnordware.com/WebM/
+- opencc
+    - `pip install opencc`
+- openai
+    - `pip install openai`
     
 # Getting Started
 - Modify `SAVE_DIR` and `API_KEY` in `src\subator_constants.py`, `python .\src\main.py --url "https://www.youtube.com/videoxxxxx"`

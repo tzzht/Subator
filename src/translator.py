@@ -12,9 +12,11 @@ import time
 import re
 from openai import OpenAI
 from deepmultilingualpunctuation import PunctuationModel
+from opencc import OpenCC
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler(f"{__name__}.log", mode="w", encoding="utf-8")
 formatter = logging.Formatter("%(asctime)s - %(message)s")
 file_handler.setFormatter(formatter)
@@ -56,7 +58,7 @@ def call_gpt_api(messages, api_key):
     response_valid = True
     try:
         response = gpt_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-3.5-turbo-ca",
             messages=messages,
         )
         content_translated = response.choices[0].message.content
@@ -148,7 +150,7 @@ def is_good_response(sentence_translated, sentence):
     if '\n' in sentence_translated:
         logger.debug(f"    Response contains multiple lines.")
         return False
-    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated or '含义' in sentence_translated) and '：' in sentence_translated):
+    if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated or '含义' in sentence_translated or '下文' in sentence_translated) and '：' in sentence_translated):
         logger.debug(f"    Response contains unexpected content.")
         return False
     if ratio > RATIO_LIMIT:
@@ -168,12 +170,14 @@ def call_llm_api(llm, messages, api_key):
         logger.error(f"Invalid llm: {llm}")
         exit(1)
   
-def translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, window_after_str):
+def translate_sentence(index, sentence, llm, api_key, user_prompt, window_before_str, window_after_str):
     RETRY_LIMIT = subator_constants.TRANSLATE_RETRY_LIMIT
     token_used = 0
 
-    system_content = f"你是一名翻译专家，双语字幕制作专家，{user_prompt}。请使用地道流畅简洁的语言表达，尽量使用简单句。"
-    user_content = f"这是上文：{window_before_str}。这是下文：{window_after_str}。请将下面这个英文句子片段翻译为中文：{sentence}。除了该片段的翻译结果不要输出任何语句。"
+    # system_content = f"你是一名翻译专家，双语字幕制作专家，{user_prompt}。请使用地道流畅简洁的语言表达，尽量使用简单句。"
+    # user_content = f"这是上文：{window_before_str}。这是下文：{window_after_str}。请将下面这个英文句子片段翻译为中文：{sentence}。除了该片段的翻译结果不要输出任何语句。"
+    system_content = f'You are a translation expert and bilingual subtitle production specialist, {user_prompt}. Please use simple sentences as much as possible.'
+    user_content = f'This is the preceding text: {window_before_str}. This is the succeeding text: {window_after_str}. Please translate the following English sentence fragment into Simplified Chinese: {sentence}. Do not output any other sentences besides the translation of the fragment.'
     message = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
     logger.info(f"Sentence: {sentence}")
     sentence_translated = '句子未翻译。'
@@ -182,9 +186,9 @@ def translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, w
     token_used += token_usage
     num_retries = 0
 
-    user_content = f"请将下面这个英文句子片段翻译为中文：{sentence}。除了该片段的翻译结果不要输出任何语句，包括但不限于(翻译结果为：，翻译为中文为：，意思是：)。"
+    user_content = f"Please translate the following English sentence fragment into Chinese: {sentence}. Do not output any other sentences besides the translation of the fragment."
     message = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
-    while not response_valid or not is_good_response(sentence_translated, sentence):
+    while sentence_translated == None or not response_valid or not is_good_response(sentence_translated, sentence):
         if num_retries >= RETRY_LIMIT:
             logger.warning(f"    Retry limit reached.")
             break
@@ -194,38 +198,68 @@ def translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, w
         num_retries += 1
 
     sentence_translated = sentence_translated.replace("您", "你")
-    return sentence_translated, token_used
+    return index, sentence_translated, token_used
 
 def translate_all(sentences, llm, api_key, user_prompt):
     WINDOW_SIZE = subator_constants.TRANSLATE_WINDOW_SIZE
     tot_tokens = 0
-    window_before = []
-    window_before_str = ''
-    window_after = []
-    window_after_str = ''
-    # Call the API to translate the sentences
-    sentences_translated = []
-    for i, sentence in enumerate(sentences):
-        logger.info(f"Translating sentence {i+1}/{len(sentences)}")
-        if i >= WINDOW_SIZE and i < len(sentences)-WINDOW_SIZE:
-            window_before = sentences[i-WINDOW_SIZE:i]
-            window_before_str = ' '.join(window_before)
-            window_after = sentences[i+1:i+1+WINDOW_SIZE]
-            window_after_str = ' '.join(window_after)
-        else:
-            window_before = []
-            window_before_str = ''
-            window_after = []
-            window_after_str = ''
+    # window_before = []
+    # window_before_str = ''
+    # window_after = []
+    # window_after_str = ''
+    # # Call the API to translate the sentences
+    # sentences_translated = []
+    # for i, sentence in enumerate(sentences):
+    #     logger.info(f"Translating sentence {i+1}/{len(sentences)}")
+    #     if i >= WINDOW_SIZE and i < len(sentences)-WINDOW_SIZE:
+    #         window_before = sentences[i-WINDOW_SIZE:i]
+    #         window_before_str = ' '.join(window_before)
+    #         window_after = sentences[i+1:i+1+WINDOW_SIZE]
+    #         window_after_str = ' '.join(window_after)
+    #     else:
+    #         window_before = []
+    #         window_before_str = ''
+    #         window_after = []
+    #         window_after_str = ''
         
-        sentence_translated, token_used = translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, window_after_str)
-        if not is_good_response(sentence_translated, sentence):
-            logger.info(f"    Bad response, Please check the response. Then modify potentially erroneous lines in ch.txt.")
-        logger.info(f"    Original: {sentence}")
-        logger.info(f"    Translated: {sentence_translated}")
-        logger.info('')
-        tot_tokens += token_used
-        sentences_translated.append(sentence_translated)
+    #     sentence_translated, token_used = translate_sentence(sentence, llm, api_key, user_prompt, window_before_str, window_after_str)
+    #     t2s = OpenCC('t2s')
+    #     sentence_translated = t2s.convert(sentence_translated)
+    #     if not is_good_response(sentence_translated, sentence):
+    #         logger.info(f"    Bad response, Please check the response. Then modify potentially erroneous lines in ch.txt.")
+    #     logger.info(f"    Original: {sentence}")
+    #     logger.info(f"    Translated: {sentence_translated}")
+    #     logger.info('')
+    #     tot_tokens += token_used
+    #     sentences_translated.append(sentence_translated)
+
+    # Use ThreadPoolExecutor to translate the sentences in parallel
+    sentences_translated = [None] * len(sentences)
+    with ThreadPoolExecutor(max_workers=128) as executor:
+        future_to_index = {
+            executor.submit(
+                translate_sentence, 
+                i, sentence, llm, api_key, user_prompt, 
+                ' '.join(sentences[max(0, i-WINDOW_SIZE):i]), 
+                ' '.join(sentences[i+1:i+1+WINDOW_SIZE])
+            ): i for i, sentence in enumerate(sentences)
+        }
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                i, sentence_translated, token_used = future.result()
+                t2s = OpenCC('t2s')
+                sentence_translated = t2s.convert(sentence_translated)
+                if not is_good_response(sentence_translated, sentences[index]):
+                    logger.info(f"    Bad response, Please check the response. Then modify potentially erroneous lines in ch.txt.")
+                logger.info(f"    Original: {sentences[index]}")
+                logger.info(f"    Translated: {sentence_translated}")
+                logger.info('')
+                tot_tokens += token_used
+                sentences_translated[i] = sentence_translated
+            except Exception as e:
+                logger.error(f"    Error in translation: {e}")
+                sentences_translated[index] = '句子未翻译。'
 
     sentences_translated = [i.strip() for i in sentences_translated]
     
@@ -234,9 +268,10 @@ def translate_all(sentences, llm, api_key, user_prompt):
 def translator(sentences_file_path, output_dir, api_key, user_prompt, llm):
     sentences = get_sentences(sentences_file_path)
 
-    # if llm == 'gpt':
-    #     global gpt_client
-    #     gpt_client = OpenAI(base_url="https://api.chatgptid.net/v1", api_key=api_key)
+    if llm == 'gpt':
+        global gpt_client
+        # gpt_client = OpenAI(base_url="https://api.chatgptid.net/v1", api_key=api_key)
+        gpt_client = OpenAI(base_url="https://api.chatanywhere.tech/v1", api_key=api_key)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

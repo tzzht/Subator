@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 import subator_constants
+import urllib.request
 
 def get_video_info(url):
     yt = YouTube(url)
@@ -12,8 +13,8 @@ def get_video_info(url):
     # print(f"Video Description: {yt.description}")
     print(f"Video Length: {yt.length} seconds")
     print(f"Publish Date: {yt.publish_date}")
-    print(f"Video Rating: {yt.rating}")
-    print(f"Video Views: {yt.views}")
+    # print(f"Video Rating: {yt.rating}")
+    # print(f"Video Views: {yt.views}")
     for stream in yt.streams:
         print(f'    {stream}')
     print()
@@ -35,6 +36,17 @@ def download_stream(save_dir, stream):
         print(f"Stream already exists at {save_path}")
     return save_path
 
+def download_thumbnail(yt, resouces_dir):
+    if not os.path.exists(resouces_dir):
+        os.makedirs(resouces_dir)
+        print(f"Create the directory {resouces_dir}")
+
+    thumbnail_url = yt.thumbnail_url
+    thumbnail_path = os.path.join(resouces_dir, "thumbnail.jpg")
+    urllib.request.urlretrieve(thumbnail_url, thumbnail_path)
+    print(f"Download the thumbnail to {thumbnail_path}")
+    return thumbnail_path
+
 def downloader(url, save_dir):
     # Get the video info
     yt = get_video_info(url)
@@ -43,6 +55,10 @@ def downloader(url, save_dir):
     video_author = ''.join(e for e in yt.author if e.isalnum())
     video_title = ''.join(e for e in yt.title if e.isalnum())
     resouces_dir = os.path.join(save_dir, video_author, video_title, "resources")
+
+    # Download the thumbnail
+    download_thumbnail(yt, resouces_dir)
+
 
     # Get the streams, filter the video and audio streams
     streams = yt.streams
