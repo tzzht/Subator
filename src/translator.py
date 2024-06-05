@@ -51,8 +51,8 @@ def get_sentences(sentences_file_path):
         sentences = f.readlines()
     return sentences
 
-def call_gpt_api(messages, api_key):
-    logger.debug("        Calling GPT API")
+def call_gpt_api(index, messages, api_key):
+    logger.debug(f"\t\tSentence {index}:\tCalling GPT API")
     content_translated = ''
     token_used = 0
     response_valid = True
@@ -64,15 +64,15 @@ def call_gpt_api(messages, api_key):
         content_translated = response.choices[0].message.content
         token_used = response.usage.total_tokens
     except Exception as e:
-        logger.error(f'        Error calling GPT API: {e}')
+        logger.error(f'\t\tSentence {index}:\tError calling GPT API: {e}')
         content_translated = '调用GPT API出错。'
         response_valid = False
 
-    logger.debug(f"        Response: {content_translated}")
+    logger.debug(f"\t\tSentence {index}:\tResponse: {content_translated}")
     return content_translated, token_used, response_valid
 
-def call_qwen_api(messages, api_key):
-    logger.debug("        Calling Qwen API")
+def call_qwen_api(index, messages, api_key):
+    logger.debug(f"\t\tSentence {index}:\tCalling Qwen API")
     content_translated = ''
     token_used = 0
     response_valid = True
@@ -89,7 +89,7 @@ def call_qwen_api(messages, api_key):
             content_translated = response.output.choices[0].message.content
             token_used = response.usage.total_tokens
         else:
-            logger.error('        Error calling Qwen API: Request id: %s, Status code: %s, error code: %s, error message: %s' % (
+            logger.error('\t\tSentence {index}:\tError calling Qwen API: Request id: %s, Status code: %s, error code: %s, error message: %s' % (
                 response.request_id, response.status_code,
                 response.code, response.message
             ))
@@ -99,15 +99,15 @@ def call_qwen_api(messages, api_key):
                 # wait for 5 seconds and retry
                 time.sleep(5)
     except Exception as e:
-        logger.error(f'        Error calling Qwen API: {e}')
+        logger.error(f'\t\tSentence {index}:\tError calling Qwen API: {e}')
         content_translated = '调用Qwen API出错。'
         response_valid = False
     
-    logger.debug(f"        Response: {content_translated}")
+    logger.debug(f"\t\tSentence {index}:\tResponse: {content_translated}")
     return content_translated, token_used, response_valid
 
-def call_glm_api(messages, api_key):
-    logger.debug("        Calling GLM API")
+def call_glm_api(index, messages, api_key):
+    logger.debug(f"\t\tSentence {index}:\tCalling GLM API")
     content_translated = ''
     token_used = 0
     response_valid = True
@@ -120,11 +120,11 @@ def call_glm_api(messages, api_key):
         content_translated = response.choices[0].message.content
         token_used = response.usage.total_tokens
     except Exception as e:
-        logger.error(f'        Error calling GLM API: {e}')
+        logger.error(f'\t\tSentence {index}:\tError calling GLM API: {e}')
         content_translated = '调用GLM API出错。'
         response_valid = False
 
-    logger.debug(f"        Response: {content_translated}")
+    logger.debug(f"\t\tSentence {index}:\tResponse: {content_translated}")
     return content_translated, token_used, response_valid
 
 def ch_len(str):
@@ -141,59 +141,57 @@ def ch_len(str):
                 i += 1
     return length
 
-def is_good_response(sentence_translated, sentence):
+def is_good_response(index, sentence_translated, sentence):
     ratio = ch_len(sentence_translated)/len(sentence.split())
-    logger.debug(f"    Ratio: {ratio}")
+    logger.debug(f"\tSentence {index}:\tRatio: {ratio}")
     RATIO_LIMIT = subator_constants.CH_EN_RATIO_LIMIT
     if len(sentence.split()) <= 10:
         RATIO_LIMIT += 0.5
     if '\n' in sentence_translated:
-        logger.debug(f"    Response contains multiple lines.")
+        logger.debug(f"\tSentence {index}:\tResponse contains multiple lines.")
         return False
     if 'API出错' in sentence_translated or (('翻译' in sentence_translated or '意思是' in sentence_translated or '意译' in sentence_translated or '含义' in sentence_translated or '下文' in sentence_translated) and '：' in sentence_translated):
-        logger.debug(f"    Response contains unexpected content.")
+        logger.debug(f"\tSentence {index}:\tResponse contains unexpected content.")
         return False
     if ratio > RATIO_LIMIT:
-        logger.debug(f"    Response is longer than expected.")
+        logger.debug(f"\tSentence {index}:\tResponse is longer than expected.")
         return False
     return True
 
-def call_llm_api(llm, messages, api_key):
+def call_llm_api(index, llm, messages, api_key):
     logger.debug(f"    Calling {llm} API with messages: {messages}")
     if llm == "gpt":
-        return call_gpt_api(messages, api_key)
+        return call_gpt_api(index, messages, api_key)
     elif llm == "qwen":
-        return call_qwen_api(messages, api_key)
+        return call_qwen_api(index, messages, api_key)
     elif llm == "glm":
-        return call_glm_api(messages, api_key)
+        return call_glm_api(index, messages, api_key)
     else:
-        logger.error(f"Invalid llm: {llm}")
+        logger.error(f"Sentence {index}:\tInvalid llm: {llm}")
         exit(1)
   
 def translate_sentence(index, sentence, llm, api_key, user_prompt, window_before_str, window_after_str):
     RETRY_LIMIT = subator_constants.TRANSLATE_RETRY_LIMIT
     token_used = 0
 
-    # system_content = f"你是一名翻译专家，双语字幕制作专家，{user_prompt}。请使用地道流畅简洁的语言表达，尽量使用简单句。"
-    # user_content = f"这是上文：{window_before_str}。这是下文：{window_after_str}。请将下面这个英文句子片段翻译为中文：{sentence}。除了该片段的翻译结果不要输出任何语句。"
     system_content = f'You are a translation expert and bilingual subtitle production specialist, {user_prompt}. Please use simple sentences as much as possible.'
     user_content = f'This is the preceding text: {window_before_str}. This is the succeeding text: {window_after_str}. Please translate the following English sentence fragment into Simplified Chinese: {sentence}. Do not output any other sentences besides the translation of the fragment.'
     message = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
-    logger.info(f"Sentence: {sentence}")
+    logger.info(f"Sentence {index}:\t{sentence}")
     sentence_translated = '句子未翻译。'
 
-    sentence_translated, token_usage, response_valid = call_llm_api(llm, message, api_key)
+    sentence_translated, token_usage, response_valid = call_llm_api(index, llm, message, api_key)
     token_used += token_usage
     num_retries = 0
 
     user_content = f"Please translate the following English sentence fragment into Chinese: {sentence}. Do not output any other sentences besides the translation of the fragment."
     message = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
-    while sentence_translated == None or not response_valid or not is_good_response(sentence_translated, sentence):
+    while sentence_translated == None or not response_valid or not is_good_response(index, sentence_translated, sentence):
         if num_retries >= RETRY_LIMIT:
-            logger.warning(f"    Retry limit reached.")
+            logger.warning(f"\tSentence {index}:\tRetry limit reached.")
             break
-        logger.debug(f"    Retrying...")
-        sentence_translated, token_usage, response_valid = call_llm_api(llm, message, api_key)
+        logger.debug(f"\tSentence {index}:\tRetrying...")
+        sentence_translated, token_usage, response_valid = call_llm_api(index, llm, message, api_key)
         token_used += token_usage
         num_retries += 1
 
@@ -233,9 +231,12 @@ def translate_all(sentences, llm, api_key, user_prompt):
     #     tot_tokens += token_used
     #     sentences_translated.append(sentence_translated)
 
+    # Start a timer to measure the time taken
+    start_time = time.time()
     # Use ThreadPoolExecutor to translate the sentences in parallel
     sentences_translated = [None] * len(sentences)
-    with ThreadPoolExecutor(max_workers=128) as executor:
+    # max_workers must be less than or equal to 61 due to the limitation of windows
+    with ThreadPoolExecutor(max_workers=61) as executor:
         future_to_index = {
             executor.submit(
                 translate_sentence, 
@@ -250,18 +251,19 @@ def translate_all(sentences, llm, api_key, user_prompt):
                 i, sentence_translated, token_used = future.result()
                 t2s = OpenCC('t2s')
                 sentence_translated = t2s.convert(sentence_translated)
-                if not is_good_response(sentence_translated, sentences[index]):
-                    logger.info(f"    Bad response, Please check the response. Then modify potentially erroneous lines in ch.txt.")
-                logger.info(f"    Original: {sentences[index]}")
-                logger.info(f"    Translated: {sentence_translated}")
-                logger.info('')
+                if not is_good_response(index, sentence_translated, sentences[index]):
+                    logger.info(f"\tSentence {i}:\tBad response, Please check the response. Then modify potentially erroneous lines in ch.txt.")
+                logger.info(f"\tSentence {i}:\tOriginal: {sentences[index]}")
+                logger.info(f"\tSentence {i}:\tTranslated: {sentence_translated}")
                 tot_tokens += token_used
                 sentences_translated[i] = sentence_translated
             except Exception as e:
-                logger.error(f"    Error in translation: {e}")
+                logger.error(f"\tSentence {i}:\tError in translation: {e}")
                 sentences_translated[index] = '句子未翻译。'
 
     sentences_translated = [i.strip() for i in sentences_translated]
+    end_time = time.time()
+    logger.info(f"Time taken: {end_time - start_time:.2f} seconds for {len(sentences)} sentences")
     
     return sentences_translated, tot_tokens
         
